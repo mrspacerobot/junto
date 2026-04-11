@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: onda
+      POSTGRES_USER: onda
+      POSTGRES_PASSWORD: onda
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+volumes:
+  pgdata:

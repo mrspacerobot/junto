@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 20000
+      idle-timeout: 300000
+  mail:
+    host: smtp.resend.com
+    port: 587
+    username: resend
+    password: ${RESEND_API_KEY}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+logging:
+  level:
+    com.onda: INFO
+    org.hibernate.SQL: WARN
+springdoc:
+  api-docs:
+    enabled: false

@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/onda
+    username: onda
+    password: onda
+  mail:
+    host: localhost
+    port: 1025
+app:
+  allowed-origin: http://localhost:5173
