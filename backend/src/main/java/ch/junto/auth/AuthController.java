@@ -57,6 +57,7 @@ public class AuthController {
     }
 
     private void authenticateUser(User user, HttpServletRequest request, HttpServletResponse response) {
+        request.changeSessionId();
         Authentication authentication = new UsernamePasswordAuthenticationToken(user, null, java.util.List.of());
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
