@@ -1,5 +1,6 @@
 package ch.junto.auth;
 
+import ch.junto.auth.dto.MeResponse;
 import ch.junto.shared.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -51,8 +52,8 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public User me(@CurrentUser User user) {
-        return user;
+    public MeResponse me(@CurrentUser User user) {
+        return MeResponse.from(user);
     }
 
     private void authenticateUser(User user, HttpServletRequest request, HttpServletResponse response) {
