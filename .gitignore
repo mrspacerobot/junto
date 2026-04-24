@@ -6,3 +6,4 @@ frontend/dist/
 .superpowers/
 .idea/
 .claude/
+.worktrees/
