@@ -94,6 +94,10 @@ public class ActivityService {
             throw new ForbiddenException("Only creator can update activity");
         }
 
+        if (activity.getStatus() == ActivityStatus.COMPLETED) {
+            throw new ConflictException("Completed activities cannot be edited");
+        }
+
         activity.setTitle(request.title());
         activity.setDescription(request.description());
         activity.setCity(request.city());

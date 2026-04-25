@@ -240,6 +240,43 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
             .andExpect(status().isConflict());
     }
 
+    @Test @DisplayName("should return 409 when updating completed activity")
+    void shouldRejectUpdateOnCompleted() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.COMPLETED);
+        activityRepository.save(activity);
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "New Title", "Desc", "Zurich", null, null,
+            OffsetDateTime.now().plusDays(3), null, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test @DisplayName("should allow updating cancelled activity")
+    void shouldAllowUpdateOnCancelled() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.CANCELLED);
+        activityRepository.save(activity);
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "Fixed Title", "Desc", "Zurich", null, null,
+            OffsetDateTime.now().plusDays(3), null, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.title").value("Fixed Title"));
+    }
+
     @Test @DisplayName("should return 409 when completing cancelled activity")
     void shouldRejectCompleteOnCancelled() throws Exception {
         Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
