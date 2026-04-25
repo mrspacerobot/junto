@@ -50,7 +50,7 @@ class ParticipantServiceTest {
     @Test
     void join_openActivity_approvesImmediately() {
         activity.setJoinPolicy(JoinPolicy.OPEN);
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
         when(participantRepository.findByActivityIdAndUserId(activity.getId(), user.getId())).thenReturn(Optional.empty());
         when(participantRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -63,7 +63,7 @@ class ParticipantServiceTest {
     @Test
     void join_approvalRequired_setsToPending() {
         activity.setJoinPolicy(JoinPolicy.APPROVAL_REQUIRED);
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
         when(participantRepository.findByActivityIdAndUserId(activity.getId(), user.getId())).thenReturn(Optional.empty());
         when(participantRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -75,7 +75,7 @@ class ParticipantServiceTest {
     @Test
     void join_afterDeadline_throwsException() {
         activity.setSignupDeadline(OffsetDateTime.now().minusHours(1));
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
 
         assertThatThrownBy(() -> participantService.join(activity.getId(), user))
             .isInstanceOf(ConflictException.class);
@@ -83,7 +83,7 @@ class ParticipantServiceTest {
 
     @Test
     void join_alreadyParticipant_throwsConflict() {
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
         when(participantRepository.findByActivityIdAndUserId(activity.getId(), user.getId()))
             .thenReturn(Optional.of(new ActivityParticipant()));
 
@@ -94,7 +94,7 @@ class ParticipantServiceTest {
     @Test
     void join_activityFull_throwsConflict() {
         activity.setMaxParticipants(5);
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
         when(participantRepository.findByActivityIdAndUserId(activity.getId(), user.getId())).thenReturn(Optional.empty());
         when(participantRepository.countByActivityIdAndStatus(activity.getId(), ParticipantStatus.APPROVED)).thenReturn(5L);
 
@@ -105,7 +105,7 @@ class ParticipantServiceTest {
     @Test
     void join_inactiveActivity_throwsConflict() {
         activity.setStatus(ActivityStatus.CANCELLED);
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
 
         assertThatThrownBy(() -> participantService.join(activity.getId(), user))
             .isInstanceOf(ConflictException.class);
@@ -114,7 +114,7 @@ class ParticipantServiceTest {
     @Test
     void join_activityNotFound_throwsNotFoundException() {
         UUID id = UUID.randomUUID();
-        when(activityRepository.findById(id)).thenReturn(Optional.empty());
+        when(activityRepository.findByIdWithLock(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> participantService.join(id, user))
             .isInstanceOf(NotFoundException.class);

@@ -41,7 +41,7 @@ public class ParticipantService {
     }
 
     public ParticipantResponse join(UUID activityId, User user) {
-        Activity activity = activityRepository.findById(activityId)
+        Activity activity = activityRepository.findByIdWithLock(activityId)
             .orElseThrow(() -> new NotFoundException("Activity not found"));
 
         if (activity.getStatus() != ActivityStatus.ACTIVE) {
@@ -108,8 +108,12 @@ public class ParticipantService {
             throw new ConflictException("Participant is not pending");
         }
 
-        long count = participantRepository.countByActivityIdAndStatus(participant.getActivity().getId(), ParticipantStatus.APPROVED);
-        if (count >= participant.getActivity().getMaxParticipants()) {
+        // Lock the activity row before capacity check
+        Activity activity = activityRepository.findByIdWithLock(participant.getActivity().getId())
+            .orElseThrow(() -> new NotFoundException("Activity not found"));
+
+        long count = participantRepository.countByActivityIdAndStatus(activity.getId(), ParticipantStatus.APPROVED);
+        if (count >= activity.getMaxParticipants()) {
             throw new ConflictException("Activity is full");
         }
 
