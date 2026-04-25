@@ -485,6 +485,27 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
             .andExpect(jsonPath("$.title").value("Corrected Title"));
     }
 
+    @Test @DisplayName("should allow join after reactivation")
+    void shouldAllowJoinAfterReactivation() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+
+        // Cancel
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/cancel")
+                .session(buildSession(testUser)))
+            .andExpect(status().isOk());
+
+        // Reactivate
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/reactivate")
+                .session(buildSession(testUser)))
+            .andExpect(status().isOk());
+
+        // New user joins
+        User joiner = dbHelper.save(UserFixture.newUser("joiner-" + UUID.randomUUID() + "@junto.app"));
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/participants/join")
+                .session(buildSession(joiner)))
+            .andExpect(status().isOk());
+    }
+
     @Test @DisplayName("should update maxParticipants and joinPolicy")
     void shouldUpdateMaxParticipantsAndJoinPolicy() throws Exception {
         Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
