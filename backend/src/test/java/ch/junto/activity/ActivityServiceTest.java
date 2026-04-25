@@ -9,6 +9,7 @@ import ch.junto.fixtures.ActivityFixture;
 import ch.junto.fixtures.UserFixture;
 import ch.junto.activity.entity.Activity;
 import ch.junto.user.entity.User;
+import ch.junto.activity.enums.ActivityStatus;
 import ch.junto.activity.enums.JoinPolicy;
 import ch.junto.core.exception.NotFoundException;
 import ch.junto.core.exception.ForbiddenException;
@@ -130,7 +131,7 @@ class ActivityServiceTest {
         Activity activity = ActivityFixture.defaultActivity(creator, "climbing");
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Updated Title", "New Desc", "New City", null, null,
-            OffsetDateTime.now().plusDays(2), null, null
+            OffsetDateTime.now().plusDays(2), null, null, null, null
         );
 
         when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
@@ -151,7 +152,7 @@ class ActivityServiceTest {
         Activity activity = ActivityFixture.defaultActivity(creator, "climbing");
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Updated Title", "New Desc", "New City", null, null,
-            OffsetDateTime.now().plusDays(2), null, null
+            OffsetDateTime.now().plusDays(2), null, null, null, null
         );
 
         when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
@@ -166,13 +167,27 @@ class ActivityServiceTest {
         User user = UserFixture.defaultUser();
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Updated Title", "New Desc", "New City", null, null,
-            OffsetDateTime.now().plusDays(2), null, null
+            OffsetDateTime.now().plusDays(2), null, null, null, null
         );
 
         when(activityRepository.findById(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> activityService.update(id, request, user))
             .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void cancel_byCreator_setsStatusCancelled() {
+        User creator = UserFixture.defaultUser();
+        Activity activity = ActivityFixture.defaultActivity(creator, "climbing");
+
+        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.save(any(Activity.class))).thenReturn(activity);
+
+        activityService.cancel(activity.getId(), creator);
+
+        assertThat(activity.getStatus()).isEqualTo(ActivityStatus.CANCELLED);
+        verify(activityRepository).save(activity);
     }
 
     @Test
@@ -194,6 +209,20 @@ class ActivityServiceTest {
         when(activityRepository.findById(id)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> activityService.cancel(id, UserFixture.defaultUser()))
             .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void complete_byCreator_setsStatusCompleted() {
+        User creator = UserFixture.defaultUser();
+        Activity activity = ActivityFixture.defaultActivity(creator, "climbing");
+
+        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.save(any(Activity.class))).thenReturn(activity);
+
+        activityService.complete(activity.getId(), creator);
+
+        assertThat(activity.getStatus()).isEqualTo(ActivityStatus.COMPLETED);
+        verify(activityRepository).save(activity);
     }
 
     @Test

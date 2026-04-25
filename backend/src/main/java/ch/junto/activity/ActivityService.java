@@ -120,6 +120,12 @@ public class ActivityService {
         activity.setLocationLng(request.locationLng());
         activity.setStartsAt(request.startsAt());
         activity.setSignupDeadline(request.signupDeadline());
+        if (request.maxParticipants() != null) {
+            activity.setMaxParticipants(request.maxParticipants());
+        }
+        if (request.joinPolicy() != null) {
+            activity.setJoinPolicy(request.joinPolicy());
+        }
 
         if (request.customFields() != null) {
             activity.getCustomFields().putAll(request.customFields());

@@ -162,7 +162,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
 
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Updated Title", "Updated Desc", "Geneva", null, null,
-            OffsetDateTime.now().plusDays(3), null, null
+            OffsetDateTime.now().plusDays(3), null, null, null, null
         );
 
         mockMvc.perform(put("/api/activities/" + activity.getId())
@@ -184,7 +184,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
 
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Hacked Title", "Desc", "City", null, null,
-            OffsetDateTime.now().plusDays(1), null, null
+            OffsetDateTime.now().plusDays(1), null, null, null, null
         );
 
         mockMvc.perform(put("/api/activities/" + activity.getId())
@@ -248,7 +248,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
 
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "New Title", "Desc", "Zurich", null, null,
-            OffsetDateTime.now().plusDays(3), null, null
+            OffsetDateTime.now().plusDays(3), null, null, null, null
         );
 
         mockMvc.perform(put("/api/activities/" + activity.getId())
@@ -266,7 +266,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
 
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Fixed Title", "Desc", "Zurich", null, null,
-            OffsetDateTime.now().plusDays(3), null, null
+            OffsetDateTime.now().plusDays(3), null, null, null, null
         );
 
         mockMvc.perform(put("/api/activities/" + activity.getId())
@@ -438,7 +438,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
 
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Title", "Desc", "Zurich", null, null,
-            startsAt, deadline, null
+            startsAt, deadline, null, null, null
         );
 
         mockMvc.perform(put("/api/activities/" + activity.getId())
@@ -455,7 +455,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
 
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Title", "Desc", "Zurich", null, null,
-            OffsetDateTime.now().minusDays(1), null, null
+            OffsetDateTime.now().minusDays(1), null, null, null, null
         );
 
         mockMvc.perform(put("/api/activities/" + activity.getId())
@@ -474,7 +474,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
 
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Corrected Title", "Desc", "Zurich", null, null,
-            OffsetDateTime.now().minusDays(1), null, null
+            OffsetDateTime.now().minusDays(1), null, null, null, null
         );
 
         mockMvc.perform(put("/api/activities/" + activity.getId())
@@ -483,5 +483,26 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
                 .content(json(request)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.title").value("Corrected Title"));
+    }
+
+    @Test @DisplayName("should update maxParticipants and joinPolicy")
+    void shouldUpdateMaxParticipantsAndJoinPolicy() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "Title", "Desc", "Zurich", null, null,
+            OffsetDateTime.now().plusDays(3), null,
+            20, JoinPolicy.APPROVAL_REQUIRED, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isOk());
+
+        Activity updated = activityRepository.findById(activity.getId()).orElseThrow();
+        assertThat(updated.getMaxParticipants()).isEqualTo(20);
+        assertThat(updated.getJoinPolicy()).isEqualTo(JoinPolicy.APPROVAL_REQUIRED);
     }
 }
