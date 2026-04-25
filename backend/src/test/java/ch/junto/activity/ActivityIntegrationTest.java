@@ -382,4 +382,106 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
                 .session(buildSession(otherUser)))
             .andExpect(status().isForbidden());
     }
+
+    @Test @DisplayName("should reject creation with past startsAt")
+    void shouldRejectCreateWithPastStartsAt() throws Exception {
+        ActivityCreateRequest request = new ActivityCreateRequest(
+            "Past Event", "Desc", "climbing", "Zurich", null, null,
+            OffsetDateTime.now().minusDays(1), null, 10, JoinPolicy.OPEN, null
+        );
+
+        mockMvc.perform(post("/api/activities")
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should reject creation with signupDeadline after startsAt")
+    void shouldRejectCreateWithDeadlineAfterStart() throws Exception {
+        OffsetDateTime startsAt = OffsetDateTime.now().plusDays(1);
+        OffsetDateTime deadline = startsAt.plusHours(1);
+
+        ActivityCreateRequest request = new ActivityCreateRequest(
+            "Bad Deadline", "Desc", "climbing", "Zurich", null, null,
+            startsAt, deadline, 10, JoinPolicy.OPEN, null
+        );
+
+        mockMvc.perform(post("/api/activities")
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should reject creation with signupDeadline equal to startsAt")
+    void shouldRejectCreateWithDeadlineEqualToStart() throws Exception {
+        OffsetDateTime startsAt = OffsetDateTime.now().plusDays(1);
+
+        ActivityCreateRequest request = new ActivityCreateRequest(
+            "Equal Deadline", "Desc", "climbing", "Zurich", null, null,
+            startsAt, startsAt, 10, JoinPolicy.OPEN, null
+        );
+
+        mockMvc.perform(post("/api/activities")
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should reject update with signupDeadline after startsAt")
+    void shouldRejectUpdateWithDeadlineAfterStart() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        OffsetDateTime startsAt = OffsetDateTime.now().plusDays(3);
+        OffsetDateTime deadline = startsAt.plusHours(1);
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "Title", "Desc", "Zurich", null, null,
+            startsAt, deadline, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should reject update moving future startsAt to past")
+    void shouldRejectUpdateFutureStartsAtToPast() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        // activity.startsAt is now+1day (future)
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "Title", "Desc", "Zurich", null, null,
+            OffsetDateTime.now().minusDays(1), null, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should allow update on already-past activity with past startsAt")
+    void shouldAllowUpdatePastStartsAtOnPastActivity() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        // Manually set startsAt to the past to simulate an already-past activity
+        activity.setStartsAt(OffsetDateTime.now().minusDays(2));
+        activityRepository.save(activity);
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "Corrected Title", "Desc", "Zurich", null, null,
+            OffsetDateTime.now().minusDays(1), null, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.title").value("Corrected Title"));
+    }
 }

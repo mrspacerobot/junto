@@ -55,6 +55,13 @@ public class ActivityService {
     public ActivityDetailResponse create(ActivityCreateRequest request, User creator) {
         ActivityTypeDefinition type = typeRegistry.get(request.typeSlug());
 
+        if (request.startsAt().isBefore(OffsetDateTime.now())) {
+            throw new ApiException("VALIDATION_ERROR", "startsAt must be in the future", 400);
+        }
+        if (request.signupDeadline() != null && !request.signupDeadline().isBefore(request.startsAt())) {
+            throw new ApiException("VALIDATION_ERROR", "signupDeadline must be before startsAt", 400);
+        }
+
         Activity activity = new Activity();
         activity.setCreator(creator);
         activity.setTypeSlug(type.getSlug());
@@ -96,6 +103,14 @@ public class ActivityService {
 
         if (activity.getStatus() == ActivityStatus.COMPLETED) {
             throw new ConflictException("Completed activities cannot be edited");
+        }
+
+        if (request.signupDeadline() != null && !request.signupDeadline().isBefore(request.startsAt())) {
+            throw new ApiException("VALIDATION_ERROR", "signupDeadline must be before startsAt", 400);
+        }
+        if (activity.getStartsAt().isAfter(OffsetDateTime.now())
+                && request.startsAt().isBefore(OffsetDateTime.now())) {
+            throw new ApiException("VALIDATION_ERROR", "startsAt must be in the future", 400);
         }
 
         activity.setTitle(request.title());
