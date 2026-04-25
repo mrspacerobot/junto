@@ -5,6 +5,7 @@ import ch.junto.activitytype.ActivityTypeRegistry;
 import ch.junto.activitytype.definition.ActivityTypeDefinition;
 import ch.junto.activitytype.definition.CustomFieldDefinition;
 import ch.junto.activitytype.enums.FieldType;
+import ch.junto.core.geo.Haversine;
 import ch.junto.participant.ParticipantService;
 import ch.junto.activity.entity.Activity;
 import ch.junto.user.entity.User;
@@ -186,7 +187,42 @@ public class ActivityService {
     }
 
     @Transactional(readOnly = true)
-    public CursorPage<ActivityListItemResponse> list(ActivityFilterParams filters, CursorPageable pageable) {
+    public CursorPage<ActivityListItemResponse> list(ActivityFilterParams filters, CursorPageable pageable, User currentUser) {
+        // Resolve search origin: query params → stored user location → null
+        Double searchLat = filters.getLat();
+        Double searchLng = filters.getLng();
+
+        if (searchLat == null && searchLng == null && currentUser != null) {
+            searchLat = currentUser.getLocationLat();
+            searchLng = currentUser.getLocationLng();
+        }
+
+        // Validate: both or neither
+        if ((searchLat == null) != (searchLng == null)) {
+            throw new ApiException("VALIDATION_ERROR", "lat and lng must both be provided or both absent", 400);
+        }
+
+        if (searchLat != null) {
+            if (searchLat < -90 || searchLat > 90) {
+                throw new ApiException("VALIDATION_ERROR", "lat must be between -90 and 90", 400);
+            }
+            if (searchLng < -180 || searchLng > 180) {
+                throw new ApiException("VALIDATION_ERROR", "lng must be between -180 and 180", 400);
+            }
+        }
+
+        double radiusKm = 25.0;
+        if (filters.getRadiusKm() != null) {
+            if (filters.getRadiusKm() <= 0 || filters.getRadiusKm() > 200) {
+                throw new ApiException("VALIDATION_ERROR", "radiusKm must be between 0 (exclusive) and 200", 400);
+            }
+            radiusKm = filters.getRadiusKm();
+        }
+
+        final Double finalLat = searchLat;
+        final Double finalLng = searchLng;
+        final double radiusMeters = radiusKm * 1000.0;
+
         Specification<Activity> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -252,6 +288,20 @@ public class ActivityService {
             // If this becomes a bottleneck, switch to @> containment or add expression indexes.
             // See jsonb-custom-field-filtering.md "Not in scope (v2)"
 
+            // Spatial filter: only activities within radius of search origin
+            if (finalLat != null) {
+                String pointWkt = "SRID=4326;POINT(" + finalLng + " " + finalLat + ")";
+                predicates.add(cb.isTrue(
+                    cb.function("st_dwithin", Boolean.class,
+                        root.get("location"),
+                        cb.literal(pointWkt),
+                        cb.literal(radiusMeters)
+                    )
+                ));
+                // Exclude activities without a location
+                predicates.add(cb.isNotNull(root.get("location")));
+            }
+
             if (pageable.hasCursor()) {
                 String decoded = new String(Base64.getDecoder().decode(pageable.getCursor()));
                 String[] parts = decoded.split("\\|");
@@ -284,8 +334,16 @@ public class ActivityService {
             nextCursor = Base64.getEncoder().encodeToString(cursorRaw.getBytes());
         }
 
+        final Double distLat = finalLat;
+        final Double distLng = finalLng;
         List<ActivityListItemResponse> dtos = resultList.stream()
-            .map(this::mapToListItemResponse)
+            .map(a -> {
+                Double distance = null;
+                if (distLat != null && a.getLocationLat() != null && a.getLocationLng() != null) {
+                    distance = Haversine.distanceKm(distLat, distLng, a.getLocationLat(), a.getLocationLng());
+                }
+                return mapToListItemResponse(a, distance);
+            })
             .collect(Collectors.toList());
 
         return new CursorPage<>(dtos, nextCursor);
@@ -339,6 +397,10 @@ public class ActivityService {
     }
 
     private ActivityListItemResponse mapToListItemResponse(Activity a) {
+        return mapToListItemResponse(a, null);
+    }
+
+    private ActivityListItemResponse mapToListItemResponse(Activity a, Double distance) {
         long currentParticipants = participantService.countApproved(a.getId());
         List<String> participantAvatars = participantService.getTopParticipantAvatars(a.getId(), 3);
         ActivityTypeDefinition type = typeRegistry.get(a.getTypeSlug());
@@ -358,7 +420,8 @@ public class ActivityService {
             a.getCustomFields(),
             resolveImageUrl(a),
             participantAvatars,
-            buildSummary(a)
+            buildSummary(a),
+            distance
         );
     }
 

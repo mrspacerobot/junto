@@ -35,8 +35,8 @@ public class ActivityController {
     @GetMapping
     @Operation(summary = "List activities", description = "List activities with optional filters and cursor-based pagination")
     @ApiResponse(responseCode = "200", description = "Page of activities")
-    public CursorPage<ActivityListItemResponse> list(ActivityFilterParams filters, CursorPageable pageable) {
-        return activityService.list(filters, pageable);
+    public CursorPage<ActivityListItemResponse> list(ActivityFilterParams filters, CursorPageable pageable, @CurrentUser User user) {
+        return activityService.list(filters, pageable, user);
     }
 
     @GetMapping("/{id}")
