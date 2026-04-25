@@ -1,7 +1,7 @@
 package ch.junto.activity.validation;
 
 import ch.junto.activity.entity.Activity;
-import ch.junto.activitytype.dto.CustomFieldDefinition;
+import ch.junto.activitytype.definition.CustomFieldDefinition;
 import ch.junto.activitytype.model.FieldType;
 import org.springframework.stereotype.Component;
 
