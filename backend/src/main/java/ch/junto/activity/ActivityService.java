@@ -162,20 +162,26 @@ public class ActivityService {
             // Requires typeSlug so field names can be validated against the type registry.
             // Uses PostgreSQL @> containment: custom_fields @> '{"style":"Bouldering"}'::jsonb
             // The GIN index (idx_activities_custom_fields_gin) serves this operator.
+            // v1 scope: SELECT fields only. BOOLEAN fields store as JSON booleans but filter params
+            // arrive as strings — mixing types causes silent @> mismatches. Expand in v2.
             if (filters.getCustomFields() != null && !filters.getCustomFields().isEmpty()) {
                 if (filters.getTypeSlug() == null || filters.getTypeSlug().isBlank()) {
                     throw new ApiException("VALIDATION_ERROR",
                         "typeSlug is required when filtering by custom fields", 400);
                 }
                 ActivityTypeDefinition type = typeRegistry.get(filters.getTypeSlug());
-                Set<String> allowedFieldNames = type.getFieldDefinitions().stream()
-                    .map(CustomFieldDefinition::name)
-                    .collect(Collectors.toSet());
+                Map<String, CustomFieldDefinition> fieldDefsByName = type.getFieldDefinitions().stream()
+                    .collect(Collectors.toMap(CustomFieldDefinition::name, d -> d));
 
                 for (String key : filters.getCustomFields().keySet()) {
-                    if (!allowedFieldNames.contains(key)) {
+                    CustomFieldDefinition def = fieldDefsByName.get(key);
+                    if (def == null) {
                         throw new ApiException("VALIDATION_ERROR",
                             "Unknown filter field: " + key, 400);
+                    }
+                    if (def.type() != FieldType.SELECT) {
+                        throw new ApiException("VALIDATION_ERROR",
+                            "Filtering on field '" + key + "' is not supported (only SELECT fields in v1)", 400);
                     }
                 }
 
