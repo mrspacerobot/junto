@@ -4,7 +4,7 @@ import ch.junto.activity.dto.*;
 import ch.junto.activitytype.ActivityTypeRegistry;
 import ch.junto.activitytype.definition.ActivityTypeDefinition;
 import ch.junto.activitytype.definition.CustomFieldDefinition;
-import ch.junto.activitytype.model.FieldType;
+import ch.junto.activitytype.enums.FieldType;
 import ch.junto.participant.ParticipantService;
 import ch.junto.activity.entity.Activity;
 import ch.junto.user.entity.User;
@@ -12,6 +12,7 @@ import ch.junto.activity.enums.ActivityStatus;
 import ch.junto.core.exception.ApiException;
 import ch.junto.core.exception.NotFoundException;
 import ch.junto.core.exception.ForbiddenException;
+import ch.junto.core.exception.ConflictException;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import ch.junto.core.pagination.CursorPage;
@@ -119,6 +120,10 @@ public class ActivityService {
             throw new ForbiddenException("Only creator can cancel activity");
         }
 
+        if (activity.getStatus() != ActivityStatus.ACTIVE) {
+            throw new ConflictException("Activity is not active");
+        }
+
         activity.setStatus(ActivityStatus.CANCELLED);
         activityRepository.save(activity);
     }
@@ -129,6 +134,10 @@ public class ActivityService {
 
         if (!activity.getCreator().getId().equals(user.getId())) {
             throw new ForbiddenException("Only creator can complete activity");
+        }
+
+        if (activity.getStatus() != ActivityStatus.ACTIVE) {
+            throw new ConflictException("Activity is not active");
         }
 
         activity.setStatus(ActivityStatus.COMPLETED);

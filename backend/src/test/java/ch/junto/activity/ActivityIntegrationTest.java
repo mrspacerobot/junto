@@ -218,6 +218,39 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
         assertThat(completed.getStatus()).isEqualTo(ActivityStatus.COMPLETED);
     }
 
+    @Test @DisplayName("should return 409 when cancelling already-cancelled activity")
+    void shouldRejectCancelOnCancelled() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.CANCELLED);
+        activityRepository.save(activity);
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/cancel")
+                .session(buildSession(testUser)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test @DisplayName("should return 409 when cancelling completed activity")
+    void shouldRejectCancelOnCompleted() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.COMPLETED);
+        activityRepository.save(activity);
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/cancel")
+                .session(buildSession(testUser)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test @DisplayName("should return 409 when completing cancelled activity")
+    void shouldRejectCompleteOnCancelled() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.CANCELLED);
+        activityRepository.save(activity);
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/complete")
+                .session(buildSession(testUser)))
+            .andExpect(status().isConflict());
+    }
+
     @Test @DisplayName("should list activity types with field definitions")
     void shouldListActivityTypes() throws Exception {
         mockMvc.perform(get("/api/activity-types")
