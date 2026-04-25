@@ -336,4 +336,50 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
                 .param("customFields[nonexistent]", "Value"))
             .andExpect(status().isBadRequest());
     }
+
+    @Test @DisplayName("should reactivate cancelled activity")
+    void shouldReactivateCancelledActivity() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.CANCELLED);
+        activityRepository.save(activity);
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/reactivate")
+                .session(buildSession(testUser)))
+            .andExpect(status().isOk());
+
+        Activity reactivated = activityRepository.findById(activity.getId()).orElseThrow();
+        assertThat(reactivated.getStatus()).isEqualTo(ActivityStatus.ACTIVE);
+    }
+
+    @Test @DisplayName("should return 409 when reactivating active activity")
+    void shouldRejectReactivateOnActive() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/reactivate")
+                .session(buildSession(testUser)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test @DisplayName("should return 409 when reactivating completed activity")
+    void shouldRejectReactivateOnCompleted() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.COMPLETED);
+        activityRepository.save(activity);
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/reactivate")
+                .session(buildSession(testUser)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test @DisplayName("should return 403 when non-creator tries to reactivate")
+    void shouldForbidReactivateByNonCreator() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.CANCELLED);
+        activityRepository.save(activity);
+        User otherUser = dbHelper.save(UserFixture.newUser("other-" + UUID.randomUUID() + "@junto.app"));
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/reactivate")
+                .session(buildSession(otherUser)))
+            .andExpect(status().isForbidden());
+    }
 }

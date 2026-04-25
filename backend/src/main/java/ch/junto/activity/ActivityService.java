@@ -148,6 +148,22 @@ public class ActivityService {
         activityRepository.save(activity);
     }
 
+    public void reactivate(UUID id, User user) {
+        Activity activity = activityRepository.findById(id)
+            .orElseThrow(() -> new NotFoundException("Activity not found"));
+
+        if (!activity.getCreator().getId().equals(user.getId())) {
+            throw new ForbiddenException("Only creator can reactivate activity");
+        }
+
+        if (activity.getStatus() != ActivityStatus.CANCELLED) {
+            throw new ConflictException("Activity is not cancelled");
+        }
+
+        activity.setStatus(ActivityStatus.ACTIVE);
+        activityRepository.save(activity);
+    }
+
     @Transactional(readOnly = true)
     public CursorPage<ActivityListItemResponse> list(ActivityFilterParams filters, CursorPageable pageable) {
         Specification<Activity> spec = (root, query, cb) -> {
