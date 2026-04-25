@@ -1,8 +1,8 @@
 package ch.junto.auth.dto;
 
-import ch.junto.shared.entity.User;
-import ch.junto.shared.enums.UserRole;
-import ch.junto.shared.enums.UserStatus;
+import ch.junto.user.entity.User;
+import ch.junto.user.enums.UserRole;
+import ch.junto.user.enums.UserStatus;
 
 import java.util.UUID;
 
@@ -13,6 +13,8 @@ public record MeResponse(
     String avatarUrl,
     String bio,
     String city,
+    Double locationLat,
+    Double locationLng,
     UserRole role,
     UserStatus status,
     boolean onboarded,
@@ -26,6 +28,8 @@ public record MeResponse(
             user.getAvatarUrl(),
             user.getBio(),
             user.getCity(),
+            user.getLocationLat(),
+            user.getLocationLng(),
             user.getRole(),
             user.getStatus(),
             user.isOnboarded(),
