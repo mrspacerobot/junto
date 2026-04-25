@@ -240,14 +240,14 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
                 .param("typeSlug", "climbing")
                 .param("customFields[style]", "Bouldering"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items[0].id").value(bouldering.getId().toString()));
+            .andExpect(jsonPath("$.data[0].id").value(bouldering.getId().toString()));
 
         mockMvc.perform(get("/api/activities")
                 .session(buildSession(testUser))
                 .param("typeSlug", "climbing")
                 .param("customFields[style]", "Sport"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items").isEmpty());
+            .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test @DisplayName("should return 400 if customFields filter used without typeSlug")

@@ -9,8 +9,11 @@ import ch.junto.participant.ParticipantService;
 import ch.junto.activity.entity.Activity;
 import ch.junto.user.entity.User;
 import ch.junto.activity.enums.ActivityStatus;
+import ch.junto.core.exception.ApiException;
 import ch.junto.core.exception.NotFoundException;
 import ch.junto.core.exception.ForbiddenException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import ch.junto.core.pagination.CursorPage;
 import ch.junto.core.pagination.CursorPageable;
 import org.springframework.data.domain.PageRequest;
@@ -32,17 +35,20 @@ public class ActivityService {
     private final ActivityTypeRegistry typeRegistry;
     private final ActivityFieldValidationService validationService;
     private final ParticipantService participantService;
+    private final ObjectMapper objectMapper;
 
     public ActivityService(
         ActivityRepository activityRepository,
         ActivityTypeRegistry typeRegistry,
         ActivityFieldValidationService validationService,
-        ParticipantService participantService
+        ParticipantService participantService,
+        ObjectMapper objectMapper
     ) {
         this.activityRepository = activityRepository;
         this.typeRegistry = typeRegistry;
         this.validationService = validationService;
         this.participantService = participantService;
+        this.objectMapper = objectMapper;
     }
 
     public ActivityDetailResponse create(ActivityCreateRequest request, User creator) {
@@ -150,6 +156,40 @@ public class ActivityService {
             }
             if (filters.getToDate() != null) {
                 predicates.add(cb.lessThanOrEqualTo(root.get("startsAt"), filters.getToDate()));
+            }
+
+            // Custom field containment filter.
+            // Requires typeSlug so field names can be validated against the type registry.
+            // Uses PostgreSQL @> containment: custom_fields @> '{"style":"Bouldering"}'::jsonb
+            // The GIN index (idx_activities_custom_fields_gin) serves this operator.
+            if (filters.getCustomFields() != null && !filters.getCustomFields().isEmpty()) {
+                if (filters.getTypeSlug() == null || filters.getTypeSlug().isBlank()) {
+                    throw new ApiException("VALIDATION_ERROR",
+                        "typeSlug is required when filtering by custom fields", 400);
+                }
+                ActivityTypeDefinition type = typeRegistry.get(filters.getTypeSlug());
+                Set<String> allowedFieldNames = type.getFieldDefinitions().stream()
+                    .map(CustomFieldDefinition::name)
+                    .collect(Collectors.toSet());
+
+                for (String key : filters.getCustomFields().keySet()) {
+                    if (!allowedFieldNames.contains(key)) {
+                        throw new ApiException("VALIDATION_ERROR",
+                            "Unknown filter field: " + key, 400);
+                    }
+                }
+
+                try {
+                    String jsonFilter = objectMapper.writeValueAsString(filters.getCustomFields());
+                    predicates.add(cb.isTrue(
+                        cb.function("jsonb_contains_op", Boolean.class,
+                            root.get("customFields"),
+                            cb.literal(jsonFilter)
+                        )
+                    ));
+                } catch (JacksonException e) {
+                    throw new RuntimeException("Failed to serialize custom field filter", e);
+                }
             }
 
             // Note: jsonb_extract_path_text doesn't leverage GIN indexes.
