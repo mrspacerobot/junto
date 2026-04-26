@@ -21,10 +21,12 @@ import { iconMap, DEFAULT_ICON } from '@/generated/icon-map'
 /** Default map center: Zürich, Switzerland. Override via center prop. */
 const ZURICH_CENTER: [number, number] = [47.3769, 8.5417]
 
-const props = defineProps<{
-  activities: any[]
+const props = withDefaults(defineProps<{
+  activities?: any[]
   center?: [number, number]
-}>()
+}>(), {
+  activities: () => []
+})
 
 const router = useRouter()
 const mapContainer = ref<HTMLDivElement>()

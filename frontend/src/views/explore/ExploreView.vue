@@ -65,6 +65,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { Search } from 'lucide-vue-next'
 import ActivityCard from '@/components/activity/ActivityCard.vue'
+import MapPanel from '@/components/map/MapPanel.vue'
 import { useActivityTypes } from '@/composables/useActivityTypes'
 import { usePagination } from '@/composables/usePagination'
 import { list1 } from '@/api/generated'

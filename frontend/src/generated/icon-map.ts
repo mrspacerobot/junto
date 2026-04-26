@@ -2,24 +2,14 @@
 // Regenerate: npm run generate-icons
 
 export const iconMap: Record<string, string> = {
-  'bike': '<!-- @license lucide-static v1.11.0 - ISC -->
-
-  <circle cx="18.5" cy="17.5" r="3.5" />
+  'bike': '<circle cx="18.5" cy="17.5" r="3.5" />
   <circle cx="5.5" cy="17.5" r="3.5" />
   <circle cx="15" cy="5" r="1" />
   <path d="M12 17.5V14l-3-3 4-3 2 3h2" />',
-  'mountain': '<!-- @license lucide-static v1.11.0 - ISC -->
-
-  <path d="m8 3 4 8 5-5 5 15H2L8 3z" />',
-  'running': '<!-- @license lucide-static v1.11.0 - ISC -->
-
-  <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />',
-  'skiing': '<!-- @license lucide-static v1.11.0 - ISC -->
-
-  <path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" />',
-  'yoga': '<!-- @license lucide-static v1.11.0 - ISC -->
-
-  <circle cx="12" cy="12" r="10" />
+  'mountain': '<path d="m8 3 4 8 5-5 5 15H2L8 3z" />',
+  'running': '<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />',
+  'skiing': '<path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" />',
+  'yoga': '<circle cx="12" cy="12" r="10" />
   <path d="M12 6v6l4 2" />',
 }
 

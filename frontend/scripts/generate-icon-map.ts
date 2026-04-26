@@ -15,6 +15,7 @@ const entries = Object.entries(mapping).map(([iconName, lucideName]) => {
   try {
     const raw = readFileSync(svgPath, 'utf-8')
     const inner = raw
+      .replace(/<!--[\s\S]*?-->/g, '')
       .replace(/<svg[^>]*>/, '')
       .replace(/<\/svg>/, '')
       .trim()
