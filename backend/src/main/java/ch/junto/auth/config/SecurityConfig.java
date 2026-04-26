@@ -1,5 +1,6 @@
 package ch.junto.auth.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -15,16 +16,28 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    @Value("${app.security.csrf.enabled:true}")
+    private boolean csrfEnabled;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-            .csrf(csrf -> csrf
+        if (csrfEnabled) {
+            var requestHandler = new CsrfTokenRequestAttributeHandler();
+            requestHandler.setCsrfRequestAttributeName(null);
+
+            http.csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-            )
+                .csrfTokenRequestHandler(requestHandler)
+            );
+        } else {
+            http.csrf(csrf -> csrf.disable());
+        }
+
+        http
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/request-code", "/api/auth/verify", "/api/auth/verify-token").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                .requestMatchers("/ws/**").permitAll()
                 .anyRequest().authenticated()
             )
             .sessionManagement(s -> s
