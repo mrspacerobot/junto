@@ -8,6 +8,8 @@
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
     "generate-api": "openapi-ts",
+    "generate-icons": "tsx scripts/generate-icon-map.ts",
+    "generate": "npm run generate-api && npm run generate-icons",
     "postinstall": "npm run generate-api || true"
   },
   "dependencies": {
