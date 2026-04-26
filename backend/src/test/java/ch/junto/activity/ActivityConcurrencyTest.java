@@ -5,6 +5,7 @@ import ch.junto.activity.enums.ActivityStatus;
 import ch.junto.activity.enums.JoinPolicy;
 import ch.junto.activity.entity.CustomFields;
 import ch.junto.base.TestContainerConfig;
+import ch.junto.chat.ChatMessageRepository;
 import ch.junto.participant.ParticipantRepository;
 import ch.junto.participant.enums.ParticipantStatus;
 import ch.junto.user.UserRepository;
@@ -22,6 +23,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -35,6 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @DisplayName("Activity Concurrency")
 class ActivityConcurrencyTest extends TestContainerConfig {
 
@@ -42,6 +45,7 @@ class ActivityConcurrencyTest extends TestContainerConfig {
     @Autowired private ActivityRepository activityRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private ParticipantRepository participantRepository;
+    @Autowired private ChatMessageRepository chatMessageRepository;
 
     private final List<UUID> createdUserIds = new ArrayList<>();
     private final List<UUID> createdActivityIds = new ArrayList<>();
@@ -49,6 +53,8 @@ class ActivityConcurrencyTest extends TestContainerConfig {
     @AfterEach
     void cleanup() {
         createdActivityIds.forEach(id -> {
+            chatMessageRepository.deleteAll(
+                chatMessageRepository.findLatestByActivityId(id, Integer.MAX_VALUE));
             participantRepository.deleteAll(participantRepository.findAllByActivityId(id));
             activityRepository.deleteById(id);
         });

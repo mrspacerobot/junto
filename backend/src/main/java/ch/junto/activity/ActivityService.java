@@ -122,6 +122,11 @@ public class ActivityService {
         activity.setStartsAt(request.startsAt());
         activity.setSignupDeadline(request.signupDeadline());
         if (request.maxParticipants() != null) {
+            long approvedCount = participantService.countApproved(id);
+            if (request.maxParticipants() < approvedCount) {
+                throw new ConflictException(
+                    "maxParticipants cannot be reduced below current approved participant count (" + approvedCount + ")");
+            }
             activity.setMaxParticipants(request.maxParticipants());
         }
         if (request.joinPolicy() != null) {
