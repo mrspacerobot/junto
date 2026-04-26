@@ -18,6 +18,7 @@ const entries = Object.entries(mapping).map(([iconName, lucideName]) => {
       .replace(/<!--[\s\S]*?-->/g, '')
       .replace(/<svg[^>]*>/, '')
       .replace(/<\/svg>/, '')
+      .replace(/\s+/g, ' ')
       .trim()
     return { iconName, inner }
   } catch {
