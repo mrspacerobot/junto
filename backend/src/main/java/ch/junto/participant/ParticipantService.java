@@ -12,6 +12,9 @@ import ch.junto.participant.enums.ParticipantStatus;
 import ch.junto.core.exception.ConflictException;
 import ch.junto.core.exception.ForbiddenException;
 import ch.junto.core.exception.NotFoundException;
+import ch.junto.chat.event.ParticipantJoinedEvent;
+import ch.junto.chat.event.ParticipantLeftEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
@@ -25,10 +28,16 @@ public class ParticipantService {
 
     private final ParticipantRepository participantRepository;
     private final ActivityRepository activityRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public ParticipantService(ParticipantRepository participantRepository, ActivityRepository activityRepository) {
+    public ParticipantService(
+        ParticipantRepository participantRepository,
+        ActivityRepository activityRepository,
+        ApplicationEventPublisher eventPublisher
+    ) {
         this.participantRepository = participantRepository;
         this.activityRepository = activityRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     public void addCreator(Activity activity, User creator) {
@@ -74,6 +83,9 @@ public class ParticipantService {
         }
 
         participant = participantRepository.save(participant);
+        if (participant.getStatus() == ParticipantStatus.APPROVED) {
+            eventPublisher.publishEvent(new ParticipantJoinedEvent(activityId, user.getDisplayName()));
+        }
         return mapToResponse(participant);
     }
 
@@ -94,6 +106,7 @@ public class ParticipantService {
         }
 
         participantRepository.delete(participant);
+        eventPublisher.publishEvent(new ParticipantLeftEvent(activityId, user.getDisplayName()));
     }
 
     public void approve(UUID participantId, User creator) {
@@ -119,6 +132,8 @@ public class ParticipantService {
 
         participant.setStatus(ParticipantStatus.APPROVED);
         participantRepository.save(participant);
+        eventPublisher.publishEvent(new ParticipantJoinedEvent(
+            participant.getActivity().getId(), participant.getUser().getDisplayName()));
     }
 
     public void decline(UUID participantId, User creator) {

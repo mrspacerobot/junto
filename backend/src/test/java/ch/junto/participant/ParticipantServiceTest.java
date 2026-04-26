@@ -20,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,6 +35,8 @@ class ParticipantServiceTest {
     private ParticipantRepository participantRepository;
     @Mock
     private ActivityRepository activityRepository;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private ParticipantService participantService;
