@@ -11,6 +11,27 @@ import java.util.UUID;
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> {
 
+    interface LastMessageProjection {
+        UUID getActivityId();
+        String getLastContent();
+        String getLastSender();
+        OffsetDateTime getLastAt();
+    }
+
+    @Query(value = """
+        SELECT DISTINCT ON (cm.activity_id)
+            cm.activity_id AS activityId,
+            cm.content AS lastContent,
+            u.display_name AS lastSender,
+            cm.created_at AS lastAt
+        FROM chat_messages cm
+        LEFT JOIN users u ON u.id = cm.user_id
+        WHERE cm.activity_id IN :activityIds
+          AND cm.type = 'USER'
+        ORDER BY cm.activity_id, cm.created_at DESC
+        """, nativeQuery = true)
+    List<LastMessageProjection> findLatestMessagesByActivityIds(@Param("activityIds") List<UUID> activityIds);
+
     @Query(value = """
         SELECT * FROM chat_messages
         WHERE activity_id = :activityId
