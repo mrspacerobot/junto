@@ -1,9 +1,11 @@
 package ch.junto.auth.config;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -35,11 +37,20 @@ public class SecurityConfig {
 
         http
             .authorizeHttpRequests(auth -> auth
+                .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll()
                 .requestMatchers("/api/auth/request-code", "/api/auth/verify", "/api/auth/verify-token", "/api/auth/dev-login").permitAll()
+                .requestMatchers("/api/**").authenticated()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
-                .requestMatchers("/ws/**").permitAll()
+                .requestMatchers("/ws", "/ws/**").permitAll()
+                .requestMatchers(
+                    "/", "/index.html", "/favicon.svg", "/assets/**",
+                    "/auth/login", "/auth/verify", "/auth/onboard",
+                    "/activities", "/activities/**", "/explore", "/saved",
+                    "/messages", "/messages/**", "/profile"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
+            .headers(headers -> headers.cacheControl(Customizer.withDefaults()))
             .sessionManagement(s -> s
                 .sessionFixation(sf -> sf.changeSessionId())
             )

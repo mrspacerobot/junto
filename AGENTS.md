@@ -2,11 +2,7 @@
 
 This file is the project's committed home for project-intrinsic agent knowledge: build, test, release, architecture, and sharp-edge notes that should travel with the code.
 
-- Backend verification is `cd backend && ./gradlew build`; the suite uses disposable
-  PostGIS containers and therefore requires Docker.
-- The provider-neutral production datasource environment contract and Render
-  Blueprint mappings are documented in `README.md`; the declarative JDBC
-  composition is authoritative in `backend/src/main/resources/application-prod.yml`.
+- See `README.md` for the authoritative build, verification, production SPA packaging, and routing contract.
 
 ## Maintaining this file
 
