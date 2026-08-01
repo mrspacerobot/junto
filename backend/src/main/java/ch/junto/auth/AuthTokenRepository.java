@@ -1,6 +1,6 @@
 package ch.junto.auth;
 
-import ch.junto.shared.entity.AuthToken;
+import ch.junto.auth.entity.AuthToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -32,8 +32,14 @@ public interface AuthTokenRepository extends JpaRepository<AuthToken, UUID> {
           AND t.code = :code
           AND t.usedAt IS NULL
           AND t.expiresAt >= :now
+          AND t.attemptCount < :maxAttempts
         """)
-    int consumeByEmailAndCode(@Param("email") String email, @Param("code") String code, @Param("now") OffsetDateTime now);
+    int consumeByEmailAndCode(
+        @Param("email") String email,
+        @Param("code") String code,
+        @Param("now") OffsetDateTime now,
+        @Param("maxAttempts") int maxAttempts
+    );
 
     // --- Attempt tracking ---
 
@@ -42,14 +48,21 @@ public interface AuthTokenRepository extends JpaRepository<AuthToken, UUID> {
         UPDATE AuthToken t
         SET t.attemptCount = t.attemptCount + 1
         WHERE t.email = :email
-          AND t.code = :code
+          AND t.code <> :submittedCode
           AND t.usedAt IS NULL
+          AND t.expiresAt >= :now
+          AND t.attemptCount < :maxAttempts
         """)
-    int incrementAttemptCount(@Param("email") String email, @Param("code") String code);
+    int incrementWrongAttempt(
+        @Param("email") String email,
+        @Param("submittedCode") String submittedCode,
+        @Param("now") OffsetDateTime now,
+        @Param("maxAttempts") int maxAttempts
+    );
 
     // --- Lookup (with usedAt filter) ---
 
-    Optional<AuthToken> findByEmailAndCodeAndUsedAtIsNull(String email, String code);
+    Optional<AuthToken> findFirstByEmailAndUsedAtIsNullOrderByCreatedAtDesc(String email);
     Optional<AuthToken> findByTokenAndUsedAtIsNull(UUID token);
 
     // --- Lookup (without usedAt filter — for post-consume metadata) ---

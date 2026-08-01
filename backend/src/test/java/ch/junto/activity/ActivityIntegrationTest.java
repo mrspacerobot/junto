@@ -10,6 +10,8 @@ import ch.junto.base.BaseIntegrationTest;
 import ch.junto.fixtures.ActivityFixture;
 import ch.junto.fixtures.UserFixture;
 import ch.junto.helpers.DatabaseHelper;
+import ch.junto.helpers.MockMvcTestHelper;
+import ch.junto.participant.ParticipantService;
 import ch.junto.user.UserRepository;
 import ch.junto.user.entity.User;
 import tools.jackson.databind.ObjectMapper;
@@ -19,10 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -39,6 +37,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
     @Autowired private DatabaseHelper dbHelper;
     @Autowired private UserRepository userRepository;
     @Autowired private ActivityRepository activityRepository;
+    @Autowired private ParticipantService participantService;
 
     private User testUser;
 
@@ -48,16 +47,11 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
     }
 
     private String json(Object dto) {
-        try { return objectMapper.writeValueAsString(dto); }
-        catch (Exception e) { throw new RuntimeException(e); }
+        return MockMvcTestHelper.json(objectMapper, dto);
     }
 
     private MockHttpSession buildSession(User user) {
-        MockHttpSession session = new MockHttpSession();
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
-        session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
-        return session;
+        return MockMvcTestHelper.sessionFor(user);
     }
 
     @Test @DisplayName("should create activity successfully")
@@ -162,7 +156,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
 
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Updated Title", "Updated Desc", "Geneva", null, null,
-            OffsetDateTime.now().plusDays(3), null, null
+            OffsetDateTime.now().plusDays(3), null, null, null, null
         );
 
         mockMvc.perform(put("/api/activities/" + activity.getId())
@@ -184,7 +178,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
 
         ActivityUpdateRequest request = new ActivityUpdateRequest(
             "Hacked Title", "Desc", "City", null, null,
-            OffsetDateTime.now().plusDays(1), null, null
+            OffsetDateTime.now().plusDays(1), null, null, null, null
         );
 
         mockMvc.perform(put("/api/activities/" + activity.getId())
@@ -216,6 +210,76 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
 
         Activity completed = activityRepository.findById(activity.getId()).orElseThrow();
         assertThat(completed.getStatus()).isEqualTo(ActivityStatus.COMPLETED);
+    }
+
+    @Test @DisplayName("should return 409 when cancelling already-cancelled activity")
+    void shouldRejectCancelOnCancelled() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.CANCELLED);
+        activityRepository.save(activity);
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/cancel")
+                .session(buildSession(testUser)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test @DisplayName("should return 409 when cancelling completed activity")
+    void shouldRejectCancelOnCompleted() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.COMPLETED);
+        activityRepository.save(activity);
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/cancel")
+                .session(buildSession(testUser)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test @DisplayName("should return 409 when updating completed activity")
+    void shouldRejectUpdateOnCompleted() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.COMPLETED);
+        activityRepository.save(activity);
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "New Title", "Desc", "Zurich", null, null,
+            OffsetDateTime.now().plusDays(3), null, null, null, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test @DisplayName("should allow updating cancelled activity")
+    void shouldAllowUpdateOnCancelled() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.CANCELLED);
+        activityRepository.save(activity);
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "Fixed Title", "Desc", "Zurich", null, null,
+            OffsetDateTime.now().plusDays(3), null, null, null, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.title").value("Fixed Title"));
+    }
+
+    @Test @DisplayName("should return 409 when completing cancelled activity")
+    void shouldRejectCompleteOnCancelled() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.CANCELLED);
+        activityRepository.save(activity);
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/complete")
+                .session(buildSession(testUser)))
+            .andExpect(status().isConflict());
     }
 
     @Test @DisplayName("should list activity types with field definitions")
@@ -265,5 +329,236 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
                 .param("typeSlug", "climbing")
                 .param("customFields[nonexistent]", "Value"))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should reject malformed activity cursors")
+    void shouldRejectMalformedCursor() throws Exception {
+        mockMvc.perform(get("/api/activities")
+                .session(buildSession(testUser))
+                .param("cursor", "not-a-valid-cursor"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error.code").value("INVALID_CURSOR"));
+    }
+
+    @Test @DisplayName("should reject radius without a search origin")
+    void shouldRejectRadiusWithoutOrigin() throws Exception {
+        mockMvc.perform(get("/api/activities")
+                .session(buildSession(testUser))
+                .param("radiusKm", "10"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should honor true and false joinable filters")
+    void shouldFilterByJoinability() throws Exception {
+        Activity joinable = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        participantService.addCreator(joinable, testUser);
+        Activity full = ActivityFixture.newActivity(testUser, "cycling");
+        full.setMaxParticipants(1);
+        full = dbHelper.save(full);
+        participantService.addCreator(full, testUser);
+
+        mockMvc.perform(get("/api/activities")
+                .session(buildSession(testUser))
+                .param("joinable", "true"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].id").value(joinable.getId().toString()))
+            .andExpect(jsonPath("$.data.length()").value(1));
+
+        mockMvc.perform(get("/api/activities")
+                .session(buildSession(testUser))
+                .param("joinable", "false"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].id").value(full.getId().toString()))
+            .andExpect(jsonPath("$.data.length()").value(1));
+    }
+
+    @Test @DisplayName("should reactivate cancelled activity")
+    void shouldReactivateCancelledActivity() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.CANCELLED);
+        activityRepository.save(activity);
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/reactivate")
+                .session(buildSession(testUser)))
+            .andExpect(status().isOk());
+
+        Activity reactivated = activityRepository.findById(activity.getId()).orElseThrow();
+        assertThat(reactivated.getStatus()).isEqualTo(ActivityStatus.ACTIVE);
+    }
+
+    @Test @DisplayName("should return 409 when reactivating active activity")
+    void shouldRejectReactivateOnActive() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/reactivate")
+                .session(buildSession(testUser)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test @DisplayName("should return 409 when reactivating completed activity")
+    void shouldRejectReactivateOnCompleted() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.COMPLETED);
+        activityRepository.save(activity);
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/reactivate")
+                .session(buildSession(testUser)))
+            .andExpect(status().isConflict());
+    }
+
+    @Test @DisplayName("should return 403 when non-creator tries to reactivate")
+    void shouldForbidReactivateByNonCreator() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        activity.setStatus(ActivityStatus.CANCELLED);
+        activityRepository.save(activity);
+        User otherUser = dbHelper.save(UserFixture.newUser("other-" + UUID.randomUUID() + "@junto.app"));
+
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/reactivate")
+                .session(buildSession(otherUser)))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test @DisplayName("should reject creation with past startsAt")
+    void shouldRejectCreateWithPastStartsAt() throws Exception {
+        ActivityCreateRequest request = new ActivityCreateRequest(
+            "Past Event", "Desc", "climbing", "Zurich", null, null,
+            OffsetDateTime.now().minusDays(1), null, 10, JoinPolicy.OPEN, null
+        );
+
+        mockMvc.perform(post("/api/activities")
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should reject creation with signupDeadline after startsAt")
+    void shouldRejectCreateWithDeadlineAfterStart() throws Exception {
+        OffsetDateTime startsAt = OffsetDateTime.now().plusDays(1);
+        OffsetDateTime deadline = startsAt.plusHours(1);
+
+        ActivityCreateRequest request = new ActivityCreateRequest(
+            "Bad Deadline", "Desc", "climbing", "Zurich", null, null,
+            startsAt, deadline, 10, JoinPolicy.OPEN, null
+        );
+
+        mockMvc.perform(post("/api/activities")
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should reject creation with signupDeadline equal to startsAt")
+    void shouldRejectCreateWithDeadlineEqualToStart() throws Exception {
+        OffsetDateTime startsAt = OffsetDateTime.now().plusDays(1);
+
+        ActivityCreateRequest request = new ActivityCreateRequest(
+            "Equal Deadline", "Desc", "climbing", "Zurich", null, null,
+            startsAt, startsAt, 10, JoinPolicy.OPEN, null
+        );
+
+        mockMvc.perform(post("/api/activities")
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should reject update with signupDeadline after startsAt")
+    void shouldRejectUpdateWithDeadlineAfterStart() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        OffsetDateTime startsAt = OffsetDateTime.now().plusDays(3);
+        OffsetDateTime deadline = startsAt.plusHours(1);
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "Title", "Desc", "Zurich", null, null,
+            startsAt, deadline, null, null, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should reject update moving future startsAt to past")
+    void shouldRejectUpdateFutureStartsAtToPast() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        // activity.startsAt is now+1day (future)
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "Title", "Desc", "Zurich", null, null,
+            OffsetDateTime.now().minusDays(1), null, null, null, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should allow update on already-past activity with past startsAt")
+    void shouldAllowUpdatePastStartsAtOnPastActivity() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        // Manually set startsAt to the past to simulate an already-past activity
+        activity.setStartsAt(OffsetDateTime.now().minusDays(2));
+        activityRepository.save(activity);
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "Corrected Title", "Desc", "Zurich", null, null,
+            OffsetDateTime.now().minusDays(1), null, null, null, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.title").value("Corrected Title"));
+    }
+
+    @Test @DisplayName("should allow join after reactivation")
+    void shouldAllowJoinAfterReactivation() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+
+        // Cancel
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/cancel")
+                .session(buildSession(testUser)))
+            .andExpect(status().isOk());
+
+        // Reactivate
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/reactivate")
+                .session(buildSession(testUser)))
+            .andExpect(status().isOk());
+
+        // New user joins
+        User joiner = dbHelper.save(UserFixture.newUser("joiner-" + UUID.randomUUID() + "@junto.app"));
+        mockMvc.perform(post("/api/activities/" + activity.getId() + "/participants/join")
+                .session(buildSession(joiner)))
+            .andExpect(status().isOk());
+    }
+
+    @Test @DisplayName("should update maxParticipants and joinPolicy")
+    void shouldUpdateMaxParticipantsAndJoinPolicy() throws Exception {
+        Activity activity = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+
+        ActivityUpdateRequest request = new ActivityUpdateRequest(
+            "Title", "Desc", "Zurich", null, null,
+            OffsetDateTime.now().plusDays(3), null,
+            20, JoinPolicy.APPROVAL_REQUIRED, null
+        );
+
+        mockMvc.perform(put("/api/activities/" + activity.getId())
+                .session(buildSession(testUser))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)))
+            .andExpect(status().isOk());
+
+        Activity updated = activityRepository.findById(activity.getId()).orElseThrow();
+        assertThat(updated.getMaxParticipants()).isEqualTo(20);
+        assertThat(updated.getJoinPolicy()).isEqualTo(JoinPolicy.APPROVAL_REQUIRED);
     }
 }

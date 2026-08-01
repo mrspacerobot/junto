@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [master, 'feat/**', 'fm/**']
+  pull_request:
+    branches: [master]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4-alpine
+        env:
+          POSTGRES_DB: junto_openapi
+          POSTGRES_USER: junto
+          POSTGRES_PASSWORD: junto
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U junto -d junto_openapi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: gradle
+
+      - name: Compile and run complete backend suite
+        working-directory: backend
+        run: ./gradlew build --no-daemon
+
+      - name: Generate OpenAPI from a schema-valid PostgreSQL application
+        working-directory: backend
+        env:
+          OPENAPI_DATABASE_URL: jdbc:postgresql://localhost:5432/junto_openapi
+          OPENAPI_DATABASE_USER: junto
+          OPENAPI_DATABASE_PASSWORD: junto
+        run: ./gradlew generateOpenApiDocs --no-daemon
+
+      - name: Archive generated OpenAPI contract
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-spec
+          path: docs/openapi.json
+          retention-days: 1
+
+  frontend:
+    needs: backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Download generated OpenAPI contract
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-spec
+          path: docs
+
+      - name: Install reproducible dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Regenerate API bindings
+        working-directory: frontend
+        run: npm run generate-api
+
+      - name: Type-check, unit-test, and build frontend
+        working-directory: frontend
+        run: |
+          npm run typecheck
+          npm run test:unit
+          npm run build
+
+  e2e:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: gradle
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Start disposable PostgreSQL and Mailpit
+        run: docker compose up -d --wait postgres mailpit
+
+      - name: Install frontend and browser
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run provisioned end-to-end suite
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Preserve service logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Remove disposable services
+        if: always()
+        run: docker compose down -v

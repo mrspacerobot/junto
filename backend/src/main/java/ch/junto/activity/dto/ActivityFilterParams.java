@@ -24,7 +24,7 @@ public class ActivityFilterParams {
 
     /**
      * Custom field equality filters. Requires typeSlug to be set.
-     * Only SELECT and BOOLEAN fields are supported in v1.
+     * Only SELECT fields are supported in v1.
      * Example: customFields[style]=Bouldering
      */
     private Map<String, String> customFields;
@@ -49,4 +49,21 @@ public class ActivityFilterParams {
 
     public Map<String, String> getCustomFields() { return customFields; }
     public void setCustomFields(Map<String, String> customFields) { this.customFields = customFields; }
+
+    private Double lat;
+    private Double lng;
+    private Double radiusKm;
+
+    public Double getLat() { return lat; }
+    public void setLat(Double lat) { this.lat = lat; }
+
+    public Double getLng() { return lng; }
+    public void setLng(Double lng) { this.lng = lng; }
+
+    public Double getRadiusKm() { return radiusKm; }
+    public void setRadiusKm(Double radiusKm) { this.radiusKm = radiusKm; }
+
+    public boolean hasLocation() {
+        return lat != null && lng != null;
+    }
 }

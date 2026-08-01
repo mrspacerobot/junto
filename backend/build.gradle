@@ -1,11 +1,12 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.4.4'
+    id 'org.springframework.boot' version '4.0.5'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'java-test-fixtures'
+    id 'org.springdoc.openapi-gradle-plugin' version '1.9.0'
 }
 
-group = 'com.onda'
+group = 'ch.junto'
 version = '0.0.1-SNAPSHOT'
 
 java {
@@ -19,24 +20,54 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
-    implementation 'org.springframework.session:spring-session-jdbc'
-    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.springframework.boot:spring-boot-starter-session-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
     implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'org.postgresql:postgresql'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6'
+    implementation 'io.github.aytronnfr:jts-jackson3-module:0.1.0'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.testcontainers:postgresql'
-    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.springframework.boot:spring-boot-test-autoconfigure'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    implementation 'org.hibernate.orm:hibernate-spatial'
 
     testFixturesImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testFixturesImplementation 'org.springframework.boot:spring-boot-starter-security'
+    testFixturesImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testFixturesImplementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    testFixturesImplementation 'org.testcontainers:testcontainers-postgresql'
+    testFixturesImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testFixturesImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testFixturesImplementation 'org.hibernate.orm:hibernate-spatial'
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+openApi {
+    apiDocsUrl.set("http://localhost:8080/v3/api-docs")
+    outputDir.set(file("../docs"))
+    outputFileName.set("openapi.json")
+    customBootRun {
+        args.set([
+            "--spring.profiles.active=openapi",
+            "--spring.datasource.url=${System.getenv('OPENAPI_DATABASE_URL') ?: 'jdbc:postgresql://localhost:5432/junto'}",
+            "--spring.datasource.username=${System.getenv('OPENAPI_DATABASE_USER') ?: 'junto'}",
+            "--spring.datasource.password=${System.getenv('OPENAPI_DATABASE_PASSWORD') ?: 'junto'}",
+            "--spring.main.banner-mode=off"
+        ])
+    }
 }

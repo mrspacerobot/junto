@@ -10,13 +10,72 @@
       "description": "Generated server url"
     }
   ],
+  "tags": [
+    {
+      "name": "Activities",
+      "description": "Create, list, update, and manage activities"
+    },
+    {
+      "name": "Activity Types",
+      "description": "Available activity types and their field definitions"
+    }
+  ],
   "paths": {
+    "/api/users/location": {
+      "put": {
+        "tags": [
+          "user-controller"
+        ],
+        "operationId": "userUpdateLocation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "user-controller"
+        ],
+        "operationId": "userClearLocation",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/activities/{id}": {
       "get": {
         "tags": [
-          "activity-controller"
+          "Activities"
         ],
-        "operationId": "getDetail",
+        "summary": "Get activity detail",
+        "operationId": "activityGetDetail",
         "parameters": [
           {
             "name": "id",
@@ -30,7 +89,17 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Activity details",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Activity not found",
             "content": {
               "*/*": {
                 "schema": {
@@ -43,9 +112,11 @@
       },
       "put": {
         "tags": [
-          "activity-controller"
+          "Activities"
         ],
-        "operationId": "update",
+        "summary": "Update activity",
+        "description": "Only the creator can update. Type cannot be changed.",
+        "operationId": "activityUpdate",
         "parameters": [
           {
             "name": "id",
@@ -54,14 +125,6 @@
             "schema": {
               "type": "string",
               "format": "uuid"
-            }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
             }
           }
         ],
@@ -77,7 +140,47 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Activity updated",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not the activity creator",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Activity not found",
             "content": {
               "*/*": {
                 "schema": {
@@ -94,17 +197,7 @@
         "tags": [
           "user-controller"
         ],
-        "operationId": "onboard",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
+        "operationId": "userOnboard",
         "requestBody": {
           "content": {
             "application/json": {
@@ -134,17 +227,7 @@
         "tags": [
           "report-controller"
         ],
-        "operationId": "submit",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
+        "operationId": "reportSubmit",
         "requestBody": {
           "content": {
             "application/json": {
@@ -174,7 +257,7 @@
         "tags": [
           "moderation-controller"
         ],
-        "operationId": "resolveReport",
+        "operationId": "moderationResolveReport",
         "parameters": [
           {
             "name": "reportId",
@@ -198,14 +281,6 @@
                 "ACTIONED"
               ]
             }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
           }
         ],
         "responses": {
@@ -220,17 +295,7 @@
         "tags": [
           "moderation-controller"
         ],
-        "operationId": "takeAction",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
+        "operationId": "moderationTakeAction",
         "requestBody": {
           "content": {
             "application/json": {
@@ -260,17 +325,7 @@
         "tags": [
           "invite-controller"
         ],
-        "operationId": "list",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
+        "operationId": "inviteList",
         "responses": {
           "200": {
             "description": "OK",
@@ -291,17 +346,7 @@
         "tags": [
           "invite-controller"
         ],
-        "operationId": "create",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
+        "operationId": "inviteCreate",
         "responses": {
           "200": {
             "description": "OK",
@@ -321,7 +366,7 @@
         "tags": [
           "auth-controller"
         ],
-        "operationId": "verify",
+        "operationId": "authVerify",
         "requestBody": {
           "content": {
             "application/json": {
@@ -344,7 +389,7 @@
         "tags": [
           "auth-controller"
         ],
-        "operationId": "verifyToken",
+        "operationId": "authVerifyToken",
         "requestBody": {
           "content": {
             "application/json": {
@@ -367,7 +412,7 @@
         "tags": [
           "auth-controller"
         ],
-        "operationId": "requestCode",
+        "operationId": "authRequestCode",
         "requestBody": {
           "content": {
             "application/json": {
@@ -388,30 +433,117 @@
     "/api/activities": {
       "get": {
         "tags": [
-          "activity-controller"
+          "Activities"
         ],
-        "operationId": "list_1",
+        "summary": "List activities",
+        "description": "List activities with optional filters and cursor-based pagination",
+        "operationId": "activityList",
         "parameters": [
           {
-            "name": "filters",
+            "name": "city",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "$ref": "#/components/schemas/ActivityFilterParams"
+              "type": "string"
             }
           },
           {
-            "name": "pageable",
+            "name": "typeSlug",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "$ref": "#/components/schemas/CursorPageable"
+              "type": "string",
+              "example": "cycling"
+            },
+            "example": "cycling"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "CANCELLED",
+                "COMPLETED"
+              ]
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "joinable",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lng",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "radiusKm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Page of activities",
             "content": {
               "*/*": {
                 "schema": {
@@ -424,19 +556,11 @@
       },
       "post": {
         "tags": [
-          "activity-controller"
+          "Activities"
         ],
-        "operationId": "create_1",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
+        "summary": "Create activity",
+        "description": "Create a new activity. Custom fields are validated against the activity type\u0027s field definitions.",
+        "operationId": "activityCreate",
         "requestBody": {
           "content": {
             "application/json": {
@@ -449,7 +573,27 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Activity created",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or custom field validation failed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
             "content": {
               "*/*": {
                 "schema": {
@@ -461,12 +605,14 @@
         }
       }
     },
-    "/api/activities/{id}/complete": {
+    "/api/activities/{id}/reactivate": {
       "post": {
         "tags": [
-          "activity-controller"
+          "Activities"
         ],
-        "operationId": "complete",
+        "summary": "Reactivate activity",
+        "description": "Only the creator can reactivate a cancelled activity.",
+        "operationId": "activityReactivate",
         "parameters": [
           {
             "name": "id",
@@ -476,19 +622,58 @@
               "type": "string",
               "format": "uuid"
             }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Activity reactivated"
           },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not the activity creator"
+          },
+          "404": {
+            "description": "Activity not found"
+          },
+          "409": {
+            "description": "Activity is not cancelled"
+          }
+        }
+      }
+    },
+    "/api/activities/{id}/complete": {
+      "post": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "Complete activity",
+        "description": "Only the creator can complete.",
+        "operationId": "activityComplete",
+        "parameters": [
           {
-            "name": "user",
-            "in": "query",
+            "name": "id",
+            "in": "path",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/User"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "Activity completed"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not the activity creator"
+          },
+          "404": {
+            "description": "Activity not found"
           }
         }
       }
@@ -496,9 +681,11 @@
     "/api/activities/{id}/cancel": {
       "post": {
         "tags": [
-          "activity-controller"
+          "Activities"
         ],
-        "operationId": "cancel",
+        "summary": "Cancel activity",
+        "description": "Only the creator can cancel.",
+        "operationId": "activityCancel",
         "parameters": [
           {
             "name": "id",
@@ -508,19 +695,20 @@
               "type": "string",
               "format": "uuid"
             }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "Activity cancelled"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not the activity creator"
+          },
+          "404": {
+            "description": "Activity not found"
           }
         }
       }
@@ -530,7 +718,7 @@
         "tags": [
           "participant-controller"
         ],
-        "operationId": "decline",
+        "operationId": "participantDecline",
         "parameters": [
           {
             "name": "activityId",
@@ -548,14 +736,6 @@
             "schema": {
               "type": "string",
               "format": "uuid"
-            }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
             }
           }
         ],
@@ -571,7 +751,7 @@
         "tags": [
           "participant-controller"
         ],
-        "operationId": "approve",
+        "operationId": "participantApprove",
         "parameters": [
           {
             "name": "activityId",
@@ -590,14 +770,6 @@
               "type": "string",
               "format": "uuid"
             }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
           }
         ],
         "responses": {
@@ -612,7 +784,7 @@
         "tags": [
           "participant-controller"
         ],
-        "operationId": "leave",
+        "operationId": "participantLeave",
         "parameters": [
           {
             "name": "activityId",
@@ -621,14 +793,6 @@
             "schema": {
               "type": "string",
               "format": "uuid"
-            }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
             }
           }
         ],
@@ -644,7 +808,7 @@
         "tags": [
           "participant-controller"
         ],
-        "operationId": "join",
+        "operationId": "participantJoin",
         "parameters": [
           {
             "name": "activityId",
@@ -653,14 +817,6 @@
             "schema": {
               "type": "string",
               "format": "uuid"
-            }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
             }
           }
         ],
@@ -678,12 +834,12 @@
         }
       }
     },
-    "/api/activities/{activityId}/chat/send": {
-      "post": {
+    "/api/activities/{activityId}/messages": {
+      "get": {
         "tags": [
           "chat-controller"
         ],
-        "operationId": "send",
+        "operationId": "chatList",
         "parameters": [
           {
             "name": "activityId",
@@ -695,11 +851,54 @@
             }
           },
           {
-            "name": "user",
+            "name": "limit",
             "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChatMessageResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "chat-controller"
+        ],
+        "operationId": "chatSend",
+        "parameters": [
+          {
+            "name": "activityId",
+            "in": "path",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/User"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -707,7 +906,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "string"
+                "$ref": "#/components/schemas/SendMessageRequest"
               }
             }
           },
@@ -732,17 +931,7 @@
         "tags": [
           "user-controller"
         ],
-        "operationId": "getProfile",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
+        "operationId": "userGetProfile",
         "responses": {
           "200": {
             "description": "OK",
@@ -762,17 +951,7 @@
         "tags": [
           "moderation-controller"
         ],
-        "operationId": "listReports",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
+        "operationId": "moderationListReports",
         "responses": {
           "200": {
             "description": "OK",
@@ -790,22 +969,35 @@
         }
       }
     },
+    "/api/messages/threads": {
+      "get": {
+        "tags": [
+          "message-controller"
+        ],
+        "operationId": "messageGetThreads",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MessageThreadResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/me": {
       "get": {
         "tags": [
           "auth-controller"
         ],
-        "operationId": "me",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
+        "operationId": "authMe",
         "responses": {
           "200": {
             "description": "OK",
@@ -823,12 +1015,14 @@
     "/api/activity-types": {
       "get": {
         "tags": [
-          "activity-type-controller"
+          "Activity Types"
         ],
-        "operationId": "list_2",
+        "summary": "List activity types",
+        "description": "Returns all activity types with field definitions, summary field configuration, and default images",
+        "operationId": "activityTypeList",
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "List of activity types",
             "content": {
               "*/*": {
                 "schema": {
@@ -848,7 +1042,7 @@
         "tags": [
           "participant-controller"
         ],
-        "operationId": "list_3",
+        "operationId": "participantList",
         "parameters": [
           {
             "name": "activityId",
@@ -877,84 +1071,12 @@
         }
       }
     },
-    "/api/activities/{activityId}/chat": {
-      "get": {
-        "tags": [
-          "chat-controller"
-        ],
-        "operationId": "list_4",
-        "parameters": [
-          {
-            "name": "activityId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ChatMessageResponse"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/users/me": {
       "delete": {
         "tags": [
           "user-controller"
         ],
-        "operationId": "deleteAccount",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/User"
-            }
-          }
-        ],
+        "operationId": "userDeleteAccount",
         "responses": {
           "200": {
             "description": "OK"
@@ -965,49 +1087,24 @@
   },
   "components": {
     "schemas": {
-      "ActivityUpdateRequest": {
+      "UpdateLocationRequest": {
         "type": "object",
         "properties": {
-          "title": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": {
-            "type": "string"
-          },
-          "city": {
-            "type": "string"
-          },
-          "locationLat": {
+          "lat": {
             "type": "number",
             "format": "double"
           },
-          "locationLng": {
+          "lng": {
             "type": "number",
             "format": "double"
-          },
-          "startsAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "signupDeadline": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "customFields": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "object"
-            },
-            "properties": {
-              "empty": {
-                "type": "boolean"
-              }
-            }
           }
-        }
+        },
+        "required": [
+          "lat",
+          "lng"
+        ]
       },
-      "User": {
+      "MeResponse": {
         "type": "object",
         "properties": {
           "id": {
@@ -1053,29 +1150,68 @@
               "DELETED"
             ]
           },
-          "invitedBy": {
-            "$ref": "#/components/schemas/User"
+          "onboarded": {
+            "type": "boolean"
           },
           "inviteCodesRemaining": {
             "type": "integer",
             "format": "int32"
-          },
-          "onboarded": {
-            "type": "boolean"
-          },
-          "lastActiveAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         }
+      },
+      "ActivityUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "locationLat": {
+            "type": "number",
+            "format": "double",
+            "maximum": 90.0,
+            "minimum": -90.0
+          },
+          "locationLng": {
+            "type": "number",
+            "format": "double",
+            "maximum": 180.0,
+            "minimum": -180.0
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "signupDeadline": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "maxParticipants": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "joinPolicy": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "APPROVAL_REQUIRED"
+            ]
+          },
+          "customFields": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "startsAt"
+        ]
       },
       "ActivityDetailResponse": {
         "type": "object",
@@ -1089,10 +1225,6 @@
           },
           "description": {
             "type": "string"
-          },
-          "activityTypeId": {
-            "type": "string",
-            "format": "uuid"
           },
           "activityTypeName": {
             "type": "string"
@@ -1137,7 +1269,6 @@
           "status": {
             "type": "string",
             "enum": [
-              "DRAFT",
               "ACTIVE",
               "CANCELLED",
               "COMPLETED"
@@ -1145,14 +1276,10 @@
           },
           "customFields": {
             "type": "object",
-            "additionalProperties": {
-              "type": "object"
-            },
-            "properties": {
-              "empty": {
-                "type": "boolean"
-              }
-            }
+            "additionalProperties": {}
+          },
+          "imageUrl": {
+            "type": "string"
           },
           "creatorId": {
             "type": "string",
@@ -1179,53 +1306,6 @@
           "displayName": {
             "type": "string",
             "minLength": 1
-          }
-        }
-      },
-      "MeResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "email": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "avatarUrl": {
-            "type": "string"
-          },
-          "bio": {
-            "type": "string"
-          },
-          "city": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string",
-            "enum": [
-              "MEMBER",
-              "MODERATOR",
-              "ADMIN"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "ACTIVE",
-              "SUSPENDED",
-              "DELETED"
-            ]
-          },
-          "onboarded": {
-            "type": "boolean"
-          },
-          "inviteCodesRemaining": {
-            "type": "integer",
-            "format": "int32"
           }
         }
       },
@@ -1288,6 +1368,76 @@
               "DISMISSED",
               "ACTIONED"
             ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "locationLat": {
+            "type": "number",
+            "format": "double"
+          },
+          "locationLng": {
+            "type": "number",
+            "format": "double"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "MEMBER",
+              "MODERATOR",
+              "ADMIN"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED",
+              "DELETED"
+            ]
+          },
+          "invitedBy": {
+            "$ref": "#/components/schemas/User"
+          },
+          "inviteCodesRemaining": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "onboarded": {
+            "type": "boolean"
+          },
+          "lastActiveAt": {
+            "type": "string",
+            "format": "date-time"
           },
           "createdAt": {
             "type": "string",
@@ -1404,7 +1554,8 @@
           },
           "code": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "\\d{6}"
           }
         }
       },
@@ -1439,20 +1590,25 @@
           "description": {
             "type": "string"
           },
-          "activityTypeId": {
+          "typeSlug": {
             "type": "string",
-            "format": "uuid"
+            "example": "cycling",
+            "minLength": 1
           },
           "city": {
             "type": "string"
           },
           "locationLat": {
             "type": "number",
-            "format": "double"
+            "format": "double",
+            "maximum": 90.0,
+            "minimum": -90.0
           },
           "locationLng": {
             "type": "number",
-            "format": "double"
+            "format": "double",
+            "maximum": 180.0,
+            "minimum": -180.0
           },
           "startsAt": {
             "type": "string",
@@ -1464,7 +1620,8 @@
           },
           "maxParticipants": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "minimum": 1
           },
           "joinPolicy": {
             "type": "string",
@@ -1475,20 +1632,15 @@
           },
           "customFields": {
             "type": "object",
-            "additionalProperties": {
-              "type": "object"
-            },
-            "properties": {
-              "empty": {
-                "type": "boolean"
-              }
-            }
+            "additionalProperties": {}
           }
         },
         "required": [
-          "activityTypeId",
           "joinPolicy",
-          "startsAt"
+          "maxParticipants",
+          "startsAt",
+          "title",
+          "typeSlug"
         ]
       },
       "ParticipantResponse": {
@@ -1520,9 +1672,18 @@
             "enum": [
               "PENDING",
               "APPROVED",
-              "DECLINED",
-              "CANCELLED"
+              "DECLINED"
             ]
+          }
+        }
+      },
+      "SendMessageRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 0
           }
         }
       },
@@ -1563,13 +1724,50 @@
           }
         }
       },
-      "ActivityTypeResponse": {
+      "MessageThreadResponse": {
         "type": "object",
         "properties": {
-          "id": {
+          "activityId": {
             "type": "string",
             "format": "uuid"
           },
+          "activityTitle": {
+            "type": "string"
+          },
+          "activityTypeSlug": {
+            "type": "string"
+          },
+          "activityTypeName": {
+            "type": "string"
+          },
+          "imageUrl": {
+            "type": "string"
+          },
+          "participantCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "participantAvatars": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastMessageContent": {
+            "type": "string"
+          },
+          "lastMessageSender": {
+            "type": "string"
+          },
+          "lastMessageAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ActivityTypeResponse": {
+        "type": "object",
+        "properties": {
           "slug": {
             "type": "string"
           },
@@ -1579,10 +1777,19 @@
           "iconName": {
             "type": "string"
           },
+          "defaultImageUrl": {
+            "type": "string"
+          },
           "customFields": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CustomFieldDefinition"
+            }
+          },
+          "summaryFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         }
@@ -1634,50 +1841,6 @@
           }
         }
       },
-      "ActivityFilterParams": {
-        "type": "object",
-        "properties": {
-          "city": {
-            "type": "string"
-          },
-          "activityTypeId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "ACTIVE",
-              "CANCELLED",
-              "COMPLETED"
-            ]
-          },
-          "fromDate": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "toDate": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "joinable": {
-            "type": "boolean"
-          }
-        }
-      },
-      "CursorPageable": {
-        "type": "object",
-        "properties": {
-          "cursor": {
-            "type": "string"
-          },
-          "limit": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
       "ActivityListItemResponse": {
         "type": "object",
         "properties": {
@@ -1694,8 +1857,19 @@
           "activityTypeSlug": {
             "type": "string"
           },
+          "activityTypeIconName": {
+            "type": "string"
+          },
           "city": {
             "type": "string"
+          },
+          "locationLat": {
+            "type": "number",
+            "format": "double"
+          },
+          "locationLng": {
+            "type": "number",
+            "format": "double"
           },
           "startsAt": {
             "type": "string",
@@ -1712,7 +1886,6 @@
           "status": {
             "type": "string",
             "enum": [
-              "DRAFT",
               "ACTIVE",
               "CANCELLED",
               "COMPLETED"
@@ -1726,14 +1899,7 @@
           },
           "customFields": {
             "type": "object",
-            "additionalProperties": {
-              "type": "object"
-            },
-            "properties": {
-              "empty": {
-                "type": "boolean"
-              }
-            }
+            "additionalProperties": {}
           },
           "imageUrl": {
             "type": "string"
@@ -1743,6 +1909,33 @@
             "items": {
               "type": "string"
             }
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivitySummaryField"
+            }
+          },
+          "distance": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "ActivitySummaryField": {
+        "type": "object",
+        "properties": {
+          "fieldName": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "object"
+          },
+          "displayValue": {
+            "type": "string"
           }
         }
       },

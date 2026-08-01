@@ -4,14 +4,18 @@ import ch.junto.activity.dto.*;
 import ch.junto.activitytype.ActivityTypeRegistry;
 import ch.junto.activitytype.definition.ActivityTypeDefinition;
 import ch.junto.activitytype.definition.CustomFieldDefinition;
-import ch.junto.activitytype.model.FieldType;
+import ch.junto.activitytype.enums.FieldType;
+import ch.junto.core.geo.Haversine;
 import ch.junto.participant.ParticipantService;
+import ch.junto.participant.entity.ActivityParticipant;
+import ch.junto.participant.enums.ParticipantStatus;
 import ch.junto.activity.entity.Activity;
 import ch.junto.user.entity.User;
 import ch.junto.activity.enums.ActivityStatus;
 import ch.junto.core.exception.ApiException;
 import ch.junto.core.exception.NotFoundException;
 import ch.junto.core.exception.ForbiddenException;
+import ch.junto.core.exception.ConflictException;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import ch.junto.core.pagination.CursorPage;
@@ -22,6 +26,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -53,6 +60,14 @@ public class ActivityService {
 
     public ActivityDetailResponse create(ActivityCreateRequest request, User creator) {
         ActivityTypeDefinition type = typeRegistry.get(request.typeSlug());
+        validateCoordinates(request.locationLat(), request.locationLng());
+
+        if (request.startsAt().isBefore(OffsetDateTime.now())) {
+            throw new ApiException("VALIDATION_ERROR", "startsAt must be in the future", 400);
+        }
+        if (request.signupDeadline() != null && !request.signupDeadline().isBefore(request.startsAt())) {
+            throw new ApiException("VALIDATION_ERROR", "signupDeadline must be before startsAt", 400);
+        }
 
         Activity activity = new Activity();
         activity.setCreator(creator);
@@ -86,11 +101,25 @@ public class ActivityService {
     }
 
     public ActivityDetailResponse update(UUID id, ActivityUpdateRequest request, User user) {
-        Activity activity = activityRepository.findById(id)
+        Activity activity = activityRepository.findByIdWithLock(id)
             .orElseThrow(() -> new NotFoundException("Activity not found"));
 
         if (!activity.getCreator().getId().equals(user.getId())) {
             throw new ForbiddenException("Only creator can update activity");
+        }
+
+        if (activity.getStatus() == ActivityStatus.COMPLETED) {
+            throw new ConflictException("Completed activities cannot be edited");
+        }
+
+        validateCoordinates(request.locationLat(), request.locationLng());
+
+        if (request.signupDeadline() != null && !request.signupDeadline().isBefore(request.startsAt())) {
+            throw new ApiException("VALIDATION_ERROR", "signupDeadline must be before startsAt", 400);
+        }
+        if (activity.getStartsAt().isAfter(OffsetDateTime.now())
+                && request.startsAt().isBefore(OffsetDateTime.now())) {
+            throw new ApiException("VALIDATION_ERROR", "startsAt must be in the future", 400);
         }
 
         activity.setTitle(request.title());
@@ -100,6 +129,17 @@ public class ActivityService {
         activity.setLocationLng(request.locationLng());
         activity.setStartsAt(request.startsAt());
         activity.setSignupDeadline(request.signupDeadline());
+        if (request.maxParticipants() != null) {
+            long approvedCount = participantService.countApproved(id);
+            if (request.maxParticipants() < approvedCount) {
+                throw new ConflictException(
+                    "maxParticipants cannot be reduced below current approved participant count (" + approvedCount + ")");
+            }
+            activity.setMaxParticipants(request.maxParticipants());
+        }
+        if (request.joinPolicy() != null) {
+            activity.setJoinPolicy(request.joinPolicy());
+        }
 
         if (request.customFields() != null) {
             activity.getCustomFields().putAll(request.customFields());
@@ -112,11 +152,15 @@ public class ActivityService {
     }
 
     public void cancel(UUID id, User user) {
-        Activity activity = activityRepository.findById(id)
+        Activity activity = activityRepository.findByIdWithLock(id)
             .orElseThrow(() -> new NotFoundException("Activity not found"));
 
         if (!activity.getCreator().getId().equals(user.getId())) {
             throw new ForbiddenException("Only creator can cancel activity");
+        }
+
+        if (activity.getStatus() != ActivityStatus.ACTIVE) {
+            throw new ConflictException("Activity is not active");
         }
 
         activity.setStatus(ActivityStatus.CANCELLED);
@@ -124,19 +168,81 @@ public class ActivityService {
     }
 
     public void complete(UUID id, User user) {
-        Activity activity = activityRepository.findById(id)
+        Activity activity = activityRepository.findByIdWithLock(id)
             .orElseThrow(() -> new NotFoundException("Activity not found"));
 
         if (!activity.getCreator().getId().equals(user.getId())) {
             throw new ForbiddenException("Only creator can complete activity");
         }
 
+        if (activity.getStatus() != ActivityStatus.ACTIVE) {
+            throw new ConflictException("Activity is not active");
+        }
+
         activity.setStatus(ActivityStatus.COMPLETED);
         activityRepository.save(activity);
     }
 
+    public void reactivate(UUID id, User user) {
+        Activity activity = activityRepository.findByIdWithLock(id)
+            .orElseThrow(() -> new NotFoundException("Activity not found"));
+
+        if (!activity.getCreator().getId().equals(user.getId())) {
+            throw new ForbiddenException("Only creator can reactivate activity");
+        }
+
+        if (activity.getStatus() != ActivityStatus.CANCELLED) {
+            throw new ConflictException("Activity is not cancelled");
+        }
+
+        if (activity.getStartsAt().isBefore(OffsetDateTime.now())) {
+            throw new ConflictException("Cannot reactivate an activity whose start time has passed");
+        }
+
+        activity.setStatus(ActivityStatus.ACTIVE);
+        activityRepository.save(activity);
+    }
+
     @Transactional(readOnly = true)
-    public CursorPage<ActivityListItemResponse> list(ActivityFilterParams filters, CursorPageable pageable) {
+    public CursorPage<ActivityListItemResponse> list(ActivityFilterParams filters, CursorPageable pageable, User currentUser) {
+        // Resolve search origin: query params → stored user location → null
+        Double searchLat = filters.getLat();
+        Double searchLng = filters.getLng();
+
+        if (searchLat == null && searchLng == null && currentUser != null) {
+            searchLat = currentUser.getLocationLat();
+            searchLng = currentUser.getLocationLng();
+        }
+
+        // Validate: both or neither
+        if ((searchLat == null) != (searchLng == null)) {
+            throw new ApiException("VALIDATION_ERROR", "lat and lng must both be provided or both absent", 400);
+        }
+
+        if (searchLat != null) {
+            if (!Double.isFinite(searchLat) || searchLat < -90 || searchLat > 90) {
+                throw new ApiException("VALIDATION_ERROR", "lat must be between -90 and 90", 400);
+            }
+            if (!Double.isFinite(searchLng) || searchLng < -180 || searchLng > 180) {
+                throw new ApiException("VALIDATION_ERROR", "lng must be between -180 and 180", 400);
+            }
+        }
+
+        double radiusKm = 25.0;
+        if (filters.getRadiusKm() != null) {
+            if (searchLat == null) {
+                throw new ApiException("VALIDATION_ERROR", "radiusKm requires a location origin", 400);
+            }
+            if (filters.getRadiusKm() <= 0 || filters.getRadiusKm() > 200) {
+                throw new ApiException("VALIDATION_ERROR", "radiusKm must be between 0 (exclusive) and 200", 400);
+            }
+            radiusKm = filters.getRadiusKm();
+        }
+
+        final Double finalLat = searchLat;
+        final Double finalLng = searchLng;
+        final double radiusMeters = radiusKm * 1000.0;
+
         Specification<Activity> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -156,6 +262,30 @@ public class ActivityService {
             }
             if (filters.getToDate() != null) {
                 predicates.add(cb.lessThanOrEqualTo(root.get("startsAt"), filters.getToDate()));
+            }
+
+            if (filters.getJoinable() != null) {
+                OffsetDateTime now = OffsetDateTime.now();
+                Subquery<Long> approvedCount = query.subquery(Long.class);
+                Root<ActivityParticipant> participant = approvedCount.from(ActivityParticipant.class);
+                approvedCount.select(cb.count(participant));
+                approvedCount.where(
+                    cb.equal(participant.get("activity"), root),
+                    cb.equal(participant.get("status"), ParticipantStatus.APPROVED)
+                );
+                Predicate beforeDeadline = cb.or(
+                    cb.greaterThan(root.get("signupDeadline"), now),
+                    cb.and(
+                        cb.isNull(root.get("signupDeadline")),
+                        cb.greaterThan(root.get("startsAt"), now)
+                    )
+                );
+                Predicate joinable = cb.and(
+                    cb.equal(root.get("status"), ActivityStatus.ACTIVE),
+                    beforeDeadline,
+                    cb.lt(approvedCount, root.get("maxParticipants"))
+                );
+                predicates.add(filters.getJoinable() ? joinable : cb.not(joinable));
             }
 
             // Custom field containment filter.
@@ -202,11 +332,24 @@ public class ActivityService {
             // If this becomes a bottleneck, switch to @> containment or add expression indexes.
             // See jsonb-custom-field-filtering.md "Not in scope (v2)"
 
+            // Spatial filter: only activities within radius of search origin
+            if (finalLat != null) {
+                String pointWkt = "SRID=4326;POINT(" + finalLng + " " + finalLat + ")";
+                predicates.add(cb.isTrue(
+                    cb.function("st_dwithin", Boolean.class,
+                        root.get("location"),
+                        cb.literal(pointWkt),
+                        cb.literal(radiusMeters)
+                    )
+                ));
+                // Exclude activities without a location
+                predicates.add(cb.isNotNull(root.get("location")));
+            }
+
             if (pageable.hasCursor()) {
-                String decoded = new String(Base64.getDecoder().decode(pageable.getCursor()));
-                String[] parts = decoded.split("\\|");
-                OffsetDateTime cursorTime = OffsetDateTime.parse(parts[0]);
-                UUID cursorId = UUID.fromString(parts[1]);
+                ActivityCursor cursor = decodeCursor(pageable.getCursor());
+                OffsetDateTime cursorTime = cursor.startsAt();
+                UUID cursorId = cursor.id();
 
                 predicates.add(cb.or(
                     cb.greaterThan(root.get("startsAt"), cursorTime),
@@ -231,11 +374,20 @@ public class ActivityService {
         if (hasNext) {
             Activity last = resultList.get(resultList.size() - 1);
             String cursorRaw = last.getStartsAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) + "|" + last.getId();
-            nextCursor = Base64.getEncoder().encodeToString(cursorRaw.getBytes());
+            nextCursor = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(cursorRaw.getBytes(StandardCharsets.UTF_8));
         }
 
+        final Double distLat = finalLat;
+        final Double distLng = finalLng;
         List<ActivityListItemResponse> dtos = resultList.stream()
-            .map(this::mapToListItemResponse)
+            .map(a -> {
+                Double distance = null;
+                if (distLat != null && a.getLocationLat() != null && a.getLocationLng() != null) {
+                    distance = Haversine.distanceKm(distLat, distLng, a.getLocationLat(), a.getLocationLng());
+                }
+                return mapToListItemResponse(a, distance);
+            })
             .collect(Collectors.toList());
 
         return new CursorPage<>(dtos, nextCursor);
@@ -251,12 +403,44 @@ public class ActivityService {
             )
         );
 
-        for (Activity a : started) {
-            a.setStatus(ActivityStatus.COMPLETED);
+        int completed = 0;
+        for (Activity candidate : started) {
+            Activity locked = activityRepository.findByIdWithLock(candidate.getId()).orElse(null);
+            if (locked != null
+                && locked.getStatus() == ActivityStatus.ACTIVE
+                && locked.getStartsAt().isBefore(threshold)) {
+                locked.setStatus(ActivityStatus.COMPLETED);
+                completed++;
+            }
         }
-        activityRepository.saveAll(started);
-        return started.size();
+        return completed;
     }
+
+    private void validateCoordinates(Double lat, Double lng) {
+        if ((lat == null) != (lng == null)) {
+            throw new ApiException("VALIDATION_ERROR",
+                "locationLat and locationLng must both be provided or both absent", 400);
+        }
+        if (lat != null && (!Double.isFinite(lat) || !Double.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180)) {
+            throw new ApiException("VALIDATION_ERROR", "Invalid coordinates", 400);
+        }
+    }
+
+    private ActivityCursor decodeCursor(String encoded) {
+        try {
+            String decoded = new String(
+                Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8);
+            String[] parts = decoded.split("\\|", -1);
+            if (parts.length != 2) {
+                throw new IllegalArgumentException("wrong cursor part count");
+            }
+            return new ActivityCursor(OffsetDateTime.parse(parts[0]), UUID.fromString(parts[1]));
+        } catch (RuntimeException ex) {
+            throw new ApiException("INVALID_CURSOR", "Cursor is malformed", 400);
+        }
+    }
+
+    private record ActivityCursor(OffsetDateTime startsAt, UUID id) {}
 
     private String resolveImageUrl(Activity a) {
         if (a.getImageUrl() != null) {
@@ -289,6 +473,10 @@ public class ActivityService {
     }
 
     private ActivityListItemResponse mapToListItemResponse(Activity a) {
+        return mapToListItemResponse(a, null);
+    }
+
+    private ActivityListItemResponse mapToListItemResponse(Activity a, Double distance) {
         long currentParticipants = participantService.countApproved(a.getId());
         List<String> participantAvatars = participantService.getTopParticipantAvatars(a.getId(), 3);
         ActivityTypeDefinition type = typeRegistry.get(a.getTypeSlug());
@@ -298,7 +486,10 @@ public class ActivityService {
             a.getTitle(),
             type.getName(),
             type.getSlug(),
+            type.getIconName(),
             a.getCity(),
+            a.getLocationLat(),
+            a.getLocationLng(),
             a.getStartsAt(),
             a.getMaxParticipants(),
             (int) currentParticipants,
@@ -308,7 +499,8 @@ public class ActivityService {
             a.getCustomFields(),
             resolveImageUrl(a),
             participantAvatars,
-            buildSummary(a)
+            buildSummary(a),
+            distance
         );
     }
 

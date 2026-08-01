@@ -101,15 +101,20 @@ Validated in the service layer (cross-field logic requires service-level checks,
 - `signupDeadline`, if set, must be strictly before `startsAt` → 400 "signupDeadline must be before startsAt"
 
 **On update:**
-- `startsAt` future check is skipped (creator may be correcting a mistake on an existing activity)
+- `startsAt` future check is skipped only if the activity's existing `startsAt` is already in the past (creator correcting a mistake). If the existing `startsAt` is in the future, the new value must also be in the future → 400 "startsAt must be in the future"
 - `signupDeadline`, if set, must be strictly before `startsAt` → 400 "signupDeadline must be before startsAt"
 
 ```java
 if (request.signupDeadline() != null && !request.signupDeadline().isBefore(request.startsAt())) {
     throw new ApiException("VALIDATION_ERROR", "signupDeadline must be before startsAt", 400);
 }
-// create only:
+// create:
 if (request.startsAt().isBefore(OffsetDateTime.now())) {
+    throw new ApiException("VALIDATION_ERROR", "startsAt must be in the future", 400);
+}
+// update — only enforce future check when existing startsAt is still in the future:
+if (existingActivity.getStartsAt().isAfter(OffsetDateTime.now())
+        && request.startsAt().isBefore(OffsetDateTime.now())) {
     throw new ApiException("VALIDATION_ERROR", "startsAt must be in the future", 400);
 }
 ```
@@ -145,9 +150,13 @@ Single Flyway migration (next available version):
 
 ```sql
 -- 1. CHECK constraint: signup_deadline must precede starts_at when set
+-- Uses NOT VALID to avoid scanning existing rows (safe if app already enforces this,
+-- and avoids migration failure if any legacy rows violate the constraint).
+-- A separate VALIDATE CONSTRAINT can be run later to fully validate.
 ALTER TABLE activities
   ADD CONSTRAINT chk_signup_before_start
-  CHECK (signup_deadline IS NULL OR signup_deadline < starts_at);
+  CHECK (signup_deadline IS NULL OR signup_deadline < starts_at)
+  NOT VALID;
 
 -- 2. Index on status to support autoCompleteStartedActivities scans
 CREATE INDEX IF NOT EXISTS idx_activities_status ON activities (status);
@@ -193,4 +202,8 @@ Note: No migration needed for `ParticipantStatus.CANCELLED` — the value was ne
 | Leave after deadline → 409 | Integration | Leave cutoff |
 | Concurrent joins at capacity | Integration | Race condition (pessimistic lock) |
 | Update `maxParticipants` and `joinPolicy` | Integration | New update fields |
+| Reactivate then join → 200 | Integration | Post-reactivation participant flow |
+| Create with `signupDeadline` == `startsAt` → 400 | Integration | Boundary (strictly-before) |
+| Update `startsAt` to past on future activity → 400 | Integration | Conditional future check |
+| Update `startsAt` to past on already-past activity → 200 | Integration | Correction allowed |
 | `ParticipantStatus.CANCELLED` not in enum | Unit | Dead code removed |
