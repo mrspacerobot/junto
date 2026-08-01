@@ -101,6 +101,18 @@ jobs:
           npm run test:unit
           npm run build
 
+  production-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the pinned production artifact
+        run: docker build --pull --tag junto:ci .
+
+      - name: Verify image contents, startup, and graceful shutdown
+        run: ./scripts/verify-image.sh junto:ci
+
   e2e:
     needs: [backend, frontend]
     runs-on: ubuntu-latest
