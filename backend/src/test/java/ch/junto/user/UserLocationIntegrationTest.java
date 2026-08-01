@@ -3,6 +3,7 @@ package ch.junto.user;
 import ch.junto.base.BaseIntegrationTest;
 import ch.junto.fixtures.UserFixture;
 import ch.junto.helpers.DatabaseHelper;
+import ch.junto.helpers.MockMvcTestHelper;
 import ch.junto.user.entity.User;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,12 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 
-import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -36,11 +32,7 @@ class UserLocationIntegrationTest extends BaseIntegrationTest {
     }
 
     private MockHttpSession buildSession(User user) {
-        MockHttpSession session = new MockHttpSession();
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
-        session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
-        return session;
+        return MockMvcTestHelper.sessionFor(user);
     }
 
     @Test @DisplayName("PUT /location sets user location")

@@ -58,7 +58,7 @@ public class ParticipantService {
         }
 
         OffsetDateTime deadline = activity.getSignupDeadline() != null ? activity.getSignupDeadline() : activity.getStartsAt();
-        if (OffsetDateTime.now().isAfter(deadline)) {
+        if (!OffsetDateTime.now().isBefore(deadline)) {
             throw new ConflictException("Signup deadline has passed");
         }
 
@@ -75,7 +75,7 @@ public class ParticipantService {
         participant.setActivity(activity);
         participant.setUser(user);
         participant.setRole(ParticipantRole.PARTICIPANT);
-        
+
         if (activity.getJoinPolicy() == JoinPolicy.OPEN) {
             participant.setStatus(ParticipantStatus.APPROVED);
         } else {
@@ -90,13 +90,8 @@ public class ParticipantService {
     }
 
     public void leave(UUID activityId, User user) {
-        Activity activity = activityRepository.findById(activityId)
+        activityRepository.findByIdWithLock(activityId)
             .orElseThrow(() -> new NotFoundException("Activity not found"));
-
-        OffsetDateTime deadline = activity.getSignupDeadline() != null ? activity.getSignupDeadline() : activity.getStartsAt();
-        if (OffsetDateTime.now().isAfter(deadline)) {
-            throw new ConflictException("Signup deadline has passed");
-        }
 
         ActivityParticipant participant = participantRepository.findByActivityIdAndUserId(activityId, user.getId())
             .orElseThrow(() -> new NotFoundException("Not a participant"));
@@ -104,26 +99,25 @@ public class ParticipantService {
         if (participant.getRole() == ParticipantRole.CREATOR) {
             throw new ConflictException("Creator cannot leave activity");
         }
+        if (participant.getStatus() == ParticipantStatus.DECLINED) {
+            throw new ConflictException("Declined participation records cannot be removed");
+        }
 
+        ParticipantStatus previousStatus = participant.getStatus();
         participantRepository.delete(participant);
-        eventPublisher.publishEvent(new ParticipantLeftEvent(activityId, user.getDisplayName()));
+        if (previousStatus == ParticipantStatus.APPROVED) {
+            eventPublisher.publishEvent(new ParticipantLeftEvent(activityId, user.getDisplayName()));
+        }
     }
 
-    public void approve(UUID participantId, User creator) {
-        ActivityParticipant participant = participantRepository.findById(participantId)
-            .orElseThrow(() -> new NotFoundException("Participant not found"));
-
-        if (!participant.getActivity().getCreator().getId().equals(creator.getId())) {
-            throw new ForbiddenException("Only creator can approve participants");
-        }
+    public void approve(UUID activityId, UUID participantId, User creator) {
+        Activity activity = lockManageableActivity(activityId, creator);
+        ActivityParticipant participant = participantRepository.findByIdAndActivityId(participantId, activityId)
+            .orElseThrow(() -> new NotFoundException("Participant not found for activity"));
 
         if (participant.getStatus() != ParticipantStatus.PENDING) {
             throw new ConflictException("Participant is not pending");
         }
-
-        // Lock the activity row before capacity check
-        Activity activity = activityRepository.findByIdWithLock(participant.getActivity().getId())
-            .orElseThrow(() -> new NotFoundException("Activity not found"));
 
         long count = participantRepository.countByActivityIdAndStatus(activity.getId(), ParticipantStatus.APPROVED);
         if (count >= activity.getMaxParticipants()) {
@@ -133,16 +127,13 @@ public class ParticipantService {
         participant.setStatus(ParticipantStatus.APPROVED);
         participantRepository.save(participant);
         eventPublisher.publishEvent(new ParticipantJoinedEvent(
-            participant.getActivity().getId(), participant.getUser().getDisplayName()));
+            activityId, participant.getUser().getDisplayName()));
     }
 
-    public void decline(UUID participantId, User creator) {
-        ActivityParticipant participant = participantRepository.findById(participantId)
-            .orElseThrow(() -> new NotFoundException("Participant not found"));
-
-        if (!participant.getActivity().getCreator().getId().equals(creator.getId())) {
-            throw new ForbiddenException("Only creator can decline participants");
-        }
+    public void decline(UUID activityId, UUID participantId, User creator) {
+        lockManageableActivity(activityId, creator);
+        ActivityParticipant participant = participantRepository.findByIdAndActivityId(participantId, activityId)
+            .orElseThrow(() -> new NotFoundException("Participant not found for activity"));
 
         if (participant.getStatus() != ParticipantStatus.PENDING) {
             throw new ConflictException("Participant is not pending");
@@ -152,10 +143,27 @@ public class ParticipantService {
         participantRepository.save(participant);
     }
 
+    private Activity lockManageableActivity(UUID activityId, User creator) {
+        Activity activity = activityRepository.findByIdWithLock(activityId)
+            .orElseThrow(() -> new NotFoundException("Activity not found"));
+        if (!activity.getCreator().getId().equals(creator.getId())) {
+            throw new ForbiddenException("Only creator can manage participants");
+        }
+        if (activity.getStatus() != ActivityStatus.ACTIVE) {
+            throw new ConflictException("Activity is not active");
+        }
+        OffsetDateTime deadline = activity.getSignupDeadline() != null
+            ? activity.getSignupDeadline() : activity.getStartsAt();
+        if (!OffsetDateTime.now().isBefore(deadline)) {
+            throw new ConflictException("Signup deadline has passed");
+        }
+        return activity;
+    }
+
     @Transactional
     public int autoDeclineExpiredRequests() {
         OffsetDateTime now = OffsetDateTime.now();
-        List<ActivityParticipant> expired = participantRepository.findAll((root, query, cb) -> 
+        List<ActivityParticipant> expired = participantRepository.findAll((root, query, cb) ->
             cb.and(
                 cb.equal(root.get("status"), ParticipantStatus.PENDING),
                 cb.or(

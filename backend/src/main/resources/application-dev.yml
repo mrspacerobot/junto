@@ -1,10 +1,22 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/onda
-    username: onda
-    password: onda
+    url: jdbc:postgresql://localhost:5432/junto
+    username: junto
+    password: junto
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  session:
+    jdbc:
+      initialize-schema: never
+  flyway:
+    locations: classpath:db/migration,classpath:db/migration-dev
   mail:
     host: localhost
     port: 1025
 app:
   allowed-origin: http://localhost:5173
+  base-url: http://localhost:5173
+  security:
+    csrf:
+      enabled: false

@@ -1,49 +1,43 @@
 <template>
   <aside class="w-[220px] bg-white border-r border-warm-300 flex flex-col h-screen fixed left-0 top-0 z-40">
     <!-- Logo -->
-    <div class="px-6 py-8">
+    <div class="px-5 pt-[22px] pb-[18px]">
       <router-link to="/activities" class="flex items-center">
-        <JuntoLogo :size="0.8" class="text-primary-700" />
+        <span class="font-display text-[26px] italic font-normal text-primary-700 tracking-tight leading-none">junto</span>
+      </router-link>
+    </div>
+
+    <!-- Create plan CTA -->
+    <div class="px-3.5 pb-5">
+      <router-link
+        to="/activities/new"
+        class="flex items-center justify-center gap-1.5 w-full py-2.5 bg-primary-700 text-white text-[13px] font-semibold rounded-[10px] hover:bg-primary-800 transition-colors"
+      >
+        <Plus class="w-3.5 h-3.5" />
+        Create a plan
       </router-link>
     </div>
 
     <!-- Navigation -->
-    <nav class="flex-1 px-4 space-y-1">
+    <nav class="flex-1 px-2 space-y-0.5">
       <router-link
-        to="/activities"
-        class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-        :class="[$route.path.startsWith('/activities') ? 'bg-primary-50 text-primary-700' : 'text-[#6A6560] hover:bg-warm-50 hover:text-slate-900']"
+        v-for="item in navItems"
+        :key="item.id"
+        :to="item.to"
+        class="flex items-center gap-2.5 w-full px-3 py-[9px] rounded-lg text-[13px] transition-colors relative"
+        :class="[isActive(item.id)
+          ? 'bg-accent-bg text-primary-700 font-semibold'
+          : 'text-[#6A6560] font-normal hover:bg-warm-100']"
       >
-        <Rss class="w-5 h-5" />
-        Feed
-      </router-link>
-      <router-link
-        to="/explore"
-        class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-        :class="[$route.path === '/explore' ? 'bg-primary-50 text-primary-700' : 'text-[#6A6560] hover:bg-warm-50 hover:text-slate-900']"
-      >
-        <Compass class="w-5 h-5" />
-        Explore
-      </router-link>
-      <router-link
-        to="/messages"
-        class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-        :class="[$route.path.startsWith('/messages') ? 'bg-primary-50 text-primary-700' : 'text-[#6A6560] hover:bg-warm-50 hover:text-slate-900']"
-      >
-        <MessageCircle class="w-5 h-5" />
-        Messages
+        <component :is="item.icon" :size="18" :class="isActive(item.id) ? 'text-primary-700' : 'text-[#6A6560]'" />
+        {{ item.label }}
       </router-link>
     </nav>
 
-    <!-- CTA -->
-    <div class="px-4 pb-4">
-      <router-link
-        to="/activities/new"
-        class="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-primary-600 text-white text-sm font-bold rounded-lg hover:bg-primary-700 transition-colors"
-      >
-        <Plus class="w-4 h-4" />
-        Plan a trip
-      </router-link>
+    <!-- Invite promo -->
+    <div class="mx-3.5 mb-5 p-3.5 bg-accent-bg rounded-xl border border-[#D4E4C8]">
+      <p class="text-sm font-semibold text-primary-700 leading-snug mb-1">Plans are better shared.</p>
+      <button class="text-xs text-accent font-medium hover:underline">Invite friends →</button>
     </div>
 
     <!-- Profile -->
@@ -67,13 +61,29 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { Rss, Compass, MessageCircle, Plus } from 'lucide-vue-next'
-import JuntoLogo from '@/components/JuntoLogo.vue'
+import { Home, Compass, MessageCircle, Bookmark, Plus } from 'lucide-vue-next'
 
 const $route = useRoute()
-const { user } = useAuthStore()
+const { user } = storeToRefs(useAuthStore())
+
+const navItems = [
+  { id: 'feed', label: 'Home', to: '/activities', icon: Home },
+  { id: 'explore', label: 'Explore', to: '/explore', icon: Compass },
+  { id: 'messages', label: 'Messages', to: '/messages', icon: MessageCircle },
+  { id: 'saved', label: 'Saved', to: '/saved', icon: Bookmark },
+]
+
+const isActive = (id: string) => {
+  const path = $route.path
+  if (id === 'feed') return path.startsWith('/activities')
+  if (id === 'explore') return path === '/explore'
+  if (id === 'messages') return path.startsWith('/messages')
+  if (id === 'saved') return path === '/saved'
+  return false
+}
 
 const initials = computed(() => {
   const name = user.value?.displayName

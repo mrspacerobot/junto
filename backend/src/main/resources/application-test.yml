@@ -1,13 +1,20 @@
 spring:
   datasource:
-    url: jdbc:tc:postgis:16-3.4:///onda_test
-    username: test
-    password: test
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: validate
+  session:
+    jdbc:
+      initialize-schema: never
   mail:
     host: localhost
     port: 1025
 app:
   allowed-origin: http://localhost:5173
+  base-url: http://localhost:5173
+  scheduling:
+    enabled: false
+  security:
+    csrf:
+      enabled: false

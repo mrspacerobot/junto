@@ -12,6 +12,12 @@ const router = createRouter({
       meta: { public: true }
     },
     {
+      path: '/auth/verify',
+      name: 'verify-magic-link',
+      component: () => import('@/views/auth/VerifyMagicLinkView.vue'),
+      meta: { public: true, allowAuthenticated: true }
+    },
+    {
       path: '/auth/onboard',
       name: 'onboard',
       component: () => import('@/views/auth/OnboardView.vue')
@@ -41,6 +47,16 @@ const router = createRouter({
           component: () => import('@/views/activities/ActivityCreateView.vue')
         },
         {
+          path: 'explore',
+          name: 'explore',
+          component: () => import('@/views/explore/ExploreView.vue')
+        },
+        {
+          path: 'saved',
+          name: 'saved',
+          component: () => import('@/views/saved/SavedView.vue')
+        },
+        {
           path: 'messages',
           name: 'messages',
           component: () => import('@/views/messages/MessagesView.vue')
@@ -61,14 +77,15 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const auth = useAuthStore()
-  
+
   if (!auth.initialized) {
     await auth.fetchMe()
   }
 
   if (to.meta.public) {
+    if (to.meta.allowAuthenticated) return next()
     if (auth.isAuthenticated) {
       if (!auth.isOnboarded) return next('/auth/onboard')
       return next('/activities')

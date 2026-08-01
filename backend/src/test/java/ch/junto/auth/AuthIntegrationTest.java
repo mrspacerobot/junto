@@ -2,20 +2,23 @@ package ch.junto.auth;
 
 import ch.junto.base.BaseIntegrationTest;
 import ch.junto.email.EmailService;
-import ch.junto.shared.entity.AuthToken;
-import ch.junto.shared.entity.InviteCode;
-import ch.junto.shared.entity.User;
-import ch.junto.shared.enums.UserRole;
-import ch.junto.shared.enums.UserStatus;
+import ch.junto.auth.entity.AuthToken;
+import ch.junto.fixtures.InviteCodeFixture;
+import ch.junto.fixtures.UserFixture;
+import ch.junto.helpers.MockMvcTestHelper;
+import ch.junto.invite.entity.InviteCode;
+import ch.junto.user.entity.User;
+import ch.junto.user.enums.UserStatus;
 import ch.junto.user.UserRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
+import jakarta.servlet.http.Cookie;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -31,7 +34,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private EmailService emailService;
 
     @Autowired
@@ -47,42 +50,25 @@ class AuthIntegrationTest extends BaseIntegrationTest {
 
     @BeforeEach
     void seedInviteCode() {
-        User inviter = new User();
-        inviter.setEmail("inviter@junto.app");
-        inviter.setDisplayName("inviter");
-        inviter.setRole(UserRole.ADMIN);
-        inviter.setStatus(UserStatus.ACTIVE);
-        inviter.setOnboarded(true);
-        inviter.setInviteCodesRemaining(99);
-        inviter = userRepository.save(inviter);
+        User inviter = userRepository.save(UserFixture.newAdmin("inviter@junto.app"));
 
-        InviteCode code = new InviteCode();
+        InviteCode code = InviteCodeFixture.valid(inviter);
+        code.setId(null);
         code.setCode(INVITE_CODE);
-        code.setCreatedBy(inviter);
         inviteCodeRepository.save(code);
     }
 
     private String json(Object dto) {
-        try {
-            return objectMapper.writeValueAsString(dto);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        return MockMvcTestHelper.json(objectMapper, dto);
     }
 
-    private AuthToken grabToken() {
-        return authTokenRepository.findAll().get(0);
+    private AuthToken grabToken(String email) {
+        return authTokenRepository.findFirstByEmailAndUsedAtIsNullOrderByCreatedAtDesc(email)
+            .orElseThrow();
     }
 
     private User seedUser(String email) {
-        User user = new User();
-        user.setEmail(email);
-        user.setDisplayName(email.split("@")[0]);
-        user.setRole(UserRole.MEMBER);
-        user.setStatus(UserStatus.ACTIVE);
-        user.setOnboarded(true);
-        user.setInviteCodesRemaining(5);
-        return userRepository.save(user);
+        return userRepository.save(UserFixture.newMember(email));
     }
 
     @Nested
@@ -97,7 +83,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                     .content(json(new AuthController.RequestCodeRequest("new@junto.app", INVITE_CODE))))
                 .andExpect(status().isOk());
 
-            AuthToken token = grabToken();
+            AuthToken token = grabToken("new@junto.app");
 
             MvcResult result = mockMvc.perform(post("/api/auth/verify")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -114,28 +100,34 @@ class AuthIntegrationTest extends BaseIntegrationTest {
             assertThat(used.getUsedBy().getId()).isEqualTo(user.getId());
 
             mockMvc.perform(get("/api/auth/me")
-                    .session((MockHttpSession) result.getRequest().getSession()))
+                    .cookie(sessionCookie(result)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("new@junto.app"))
                 .andExpect(jsonPath("$.onboarded").value(false));
         }
 
         @Test
-        @DisplayName("should reject signup without invite code")
-        void shouldRejectSignupWithoutInvite() throws Exception {
+        @DisplayName("should return generic success without issuing a token when invite is missing")
+        void shouldNotIssueTokenWithoutInvite() throws Exception {
             mockMvc.perform(post("/api/auth/request-code")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(json(new AuthController.RequestCodeRequest("noinvite@junto.app", null))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
+            assertThat(authTokenRepository
+                .findFirstByEmailAndUsedAtIsNullOrderByCreatedAtDesc("noinvite@junto.app"))
+                .isEmpty();
         }
 
         @Test
-        @DisplayName("should reject signup with invalid invite code")
-        void shouldRejectSignupWithBadInvite() throws Exception {
+        @DisplayName("should return generic success without issuing a token for an invalid invite")
+        void shouldNotIssueTokenWithBadInvite() throws Exception {
             mockMvc.perform(post("/api/auth/request-code")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(json(new AuthController.RequestCodeRequest("badinvite@junto.app", "FAKE-CODE"))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
+            assertThat(authTokenRepository
+                .findFirstByEmailAndUsedAtIsNullOrderByCreatedAtDesc("badinvite@junto.app"))
+                .isEmpty();
         }
     }
 
@@ -153,7 +145,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                     .content(json(new AuthController.RequestCodeRequest("existing@junto.app", null))))
                 .andExpect(status().isOk());
 
-            AuthToken token = grabToken();
+            AuthToken token = grabToken("existing@junto.app");
 
             MvcResult result = mockMvc.perform(post("/api/auth/verify")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -162,7 +154,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                 .andReturn();
 
             mockMvc.perform(get("/api/auth/me")
-                    .session((MockHttpSession) result.getRequest().getSession()))
+                    .cookie(sessionCookie(result)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("existing@junto.app"));
         }
@@ -177,7 +169,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                     .content(json(new AuthController.RequestCodeRequest("magic@junto.app", null))))
                 .andExpect(status().isOk());
 
-            AuthToken token = grabToken();
+            AuthToken token = grabToken("magic@junto.app");
 
             MvcResult result = mockMvc.perform(post("/api/auth/verify-token")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -186,7 +178,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                 .andReturn();
 
             mockMvc.perform(get("/api/auth/me")
-                    .session((MockHttpSession) result.getRequest().getSession()))
+                    .cookie(sessionCookie(result)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("magic@junto.app"));
         }
@@ -215,7 +207,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
             MockHttpSession preAuthSession = new MockHttpSession();
             String preAuthId = preAuthSession.getId();
 
-            AuthToken token = grabToken();
+            AuthToken token = grabToken("fixation@junto.app");
 
             MvcResult result = mockMvc.perform(post("/api/auth/verify")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -224,7 +216,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-            assertThat(result.getRequest().getSession().getId()).isNotEqualTo(preAuthId);
+            assertThat(sessionCookie(result).getValue()).isNotEqualTo(preAuthId);
         }
 
         @Test
@@ -236,7 +228,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(json(new AuthController.RequestCodeRequest("reuse@junto.app", null))));
 
-            String code = grabToken().getCode();
+            String code = grabToken("reuse@junto.app").getCode();
 
             mockMvc.perform(post("/api/auth/verify")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -258,7 +250,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(json(new AuthController.RequestCodeRequest("supersede@junto.app", null))));
 
-            String firstCode = grabToken().getCode();
+            String firstCode = grabToken("supersede@junto.app").getCode();
 
             mockMvc.perform(post("/api/auth/request-code")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -269,5 +261,11 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                     .content(json(new AuthController.VerifyCodeRequest("supersede@junto.app", firstCode))))
                 .andExpect(status().isBadRequest());
         }
+    }
+
+    private Cookie sessionCookie(MvcResult result) {
+        Cookie cookie = result.getResponse().getCookie("SESSION");
+        assertThat(cookie).as("JDBC session cookie").isNotNull();
+        return cookie;
     }
 }

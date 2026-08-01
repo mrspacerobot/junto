@@ -24,7 +24,7 @@ public class ActivityFilterParams {
 
     /**
      * Custom field equality filters. Requires typeSlug to be set.
-     * Only SELECT and BOOLEAN fields are supported in v1.
+     * Only SELECT fields are supported in v1.
      * Example: customFields[style]=Bouldering
      */
     private Map<String, String> customFields;

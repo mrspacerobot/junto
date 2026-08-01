@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -15,7 +16,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
         UUID getActivityId();
         String getLastContent();
         String getLastSender();
-        OffsetDateTime getLastAt();
+        Instant getLastAt();
     }
 
     @Query(value = """
@@ -28,7 +29,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
         LEFT JOIN users u ON u.id = cm.user_id
         WHERE cm.activity_id IN :activityIds
           AND cm.type = 'USER'
-        ORDER BY cm.activity_id, cm.created_at DESC
+        ORDER BY cm.activity_id, cm.created_at DESC, cm.id DESC
         """, nativeQuery = true)
     List<LastMessageProjection> findLatestMessagesByActivityIds(@Param("activityIds") List<UUID> activityIds);
 

@@ -15,4 +15,5 @@ public interface ActivityRepository extends JpaRepository<Activity, UUID>, JpaSp
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM Activity a WHERE a.id = :id")
     Optional<Activity> findByIdWithLock(@Param("id") UUID id);
+
 }

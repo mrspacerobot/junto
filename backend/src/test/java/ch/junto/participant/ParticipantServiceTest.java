@@ -124,37 +124,49 @@ class ParticipantServiceTest {
     }
 
     @Test
-    void leave_participant_removesParticipant() {
-        ActivityParticipant participant = new ActivityParticipant();
-        participant.setRole(ParticipantRole.PARTICIPANT);
-        participant.setActivity(activity);
-
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
-        when(participantRepository.findByActivityIdAndUserId(activity.getId(), user.getId()))
-            .thenReturn(Optional.of(participant));
+    void leave_approvedParticipant_removesParticipantAndPublishesEvent() {
+        ActivityParticipant participant = participant(ParticipantRole.PARTICIPANT, ParticipantStatus.APPROVED);
+        stubLeave(participant);
 
         participantService.leave(activity.getId(), user);
 
         verify(participantRepository).delete(participant);
+        verify(eventPublisher).publishEvent(any(ch.junto.chat.event.ParticipantLeftEvent.class));
+    }
+
+    @Test
+    void leave_pendingParticipant_removesWithoutChatEvent() {
+        ActivityParticipant participant = participant(ParticipantRole.PARTICIPANT, ParticipantStatus.PENDING);
+        stubLeave(participant);
+
+        participantService.leave(activity.getId(), user);
+
+        verify(participantRepository).delete(participant);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
     void leave_creator_throwsConflict() {
-        ActivityParticipant participant = new ActivityParticipant();
-        participant.setRole(ParticipantRole.CREATOR);
-        participant.setActivity(activity);
-
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
-        when(participantRepository.findByActivityIdAndUserId(activity.getId(), user.getId()))
-            .thenReturn(Optional.of(participant));
+        ActivityParticipant participant = participant(ParticipantRole.CREATOR, ParticipantStatus.APPROVED);
+        stubLeave(participant);
 
         assertThatThrownBy(() -> participantService.leave(activity.getId(), user))
             .isInstanceOf(ConflictException.class);
     }
 
     @Test
+    void leave_declinedParticipant_preservesDecision() {
+        ActivityParticipant participant = participant(ParticipantRole.PARTICIPANT, ParticipantStatus.DECLINED);
+        stubLeave(participant);
+
+        assertThatThrownBy(() -> participantService.leave(activity.getId(), user))
+            .isInstanceOf(ConflictException.class);
+        verify(participantRepository, never()).delete(any(ActivityParticipant.class));
+    }
+
+    @Test
     void leave_notParticipant_throwsNotFoundException() {
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
         when(participantRepository.findByActivityIdAndUserId(activity.getId(), user.getId()))
             .thenReturn(Optional.empty());
 
@@ -162,42 +174,17 @@ class ParticipantServiceTest {
             .isInstanceOf(NotFoundException.class);
     }
 
-    @Test
-    void leave_beforeDeadline_deletesParticipant() {
-        activity.setSignupDeadline(OffsetDateTime.now().plusHours(1));
+    private ActivityParticipant participant(ParticipantRole role, ParticipantStatus status) {
         ActivityParticipant participant = new ActivityParticipant();
-        participant.setRole(ParticipantRole.PARTICIPANT);
+        participant.setRole(role);
+        participant.setStatus(status);
         participant.setActivity(activity);
+        return participant;
+    }
 
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+    private void stubLeave(ActivityParticipant participant) {
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
         when(participantRepository.findByActivityIdAndUserId(activity.getId(), user.getId()))
             .thenReturn(Optional.of(participant));
-
-        participantService.leave(activity.getId(), user);
-
-        verify(participantRepository).delete(participant);
-    }
-
-    @Test
-    void leave_afterDeadline_throwsConflict() {
-        activity.setSignupDeadline(OffsetDateTime.now().minusHours(1));
-
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
-
-        assertThatThrownBy(() -> participantService.leave(activity.getId(), user))
-            .isInstanceOf(ConflictException.class)
-            .hasMessageContaining("Signup deadline has passed");
-    }
-
-    @Test
-    void leave_noDeadline_afterStartsAt_throwsConflict() {
-        activity.setSignupDeadline(null);
-        activity.setStartsAt(OffsetDateTime.now().minusHours(1));
-
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
-
-        assertThatThrownBy(() -> participantService.leave(activity.getId(), user))
-            .isInstanceOf(ConflictException.class)
-            .hasMessageContaining("Signup deadline has passed");
     }
 }

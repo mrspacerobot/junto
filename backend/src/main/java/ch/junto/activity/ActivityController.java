@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
@@ -35,7 +36,11 @@ public class ActivityController {
     @GetMapping
     @Operation(summary = "List activities", description = "List activities with optional filters and cursor-based pagination")
     @ApiResponse(responseCode = "200", description = "Page of activities")
-    public CursorPage<ActivityListItemResponse> list(ActivityFilterParams filters, CursorPageable pageable, @CurrentUser User user) {
+    public CursorPage<ActivityListItemResponse> list(
+        @ParameterObject ActivityFilterParams filters,
+        @ParameterObject CursorPageable pageable,
+        @CurrentUser User user
+    ) {
         return activityService.list(filters, pageable, user);
     }
 

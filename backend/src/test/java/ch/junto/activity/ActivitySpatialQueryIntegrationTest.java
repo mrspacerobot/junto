@@ -3,8 +3,10 @@ package ch.junto.activity;
 import ch.junto.activity.entity.Activity;
 import ch.junto.activity.enums.JoinPolicy;
 import ch.junto.base.BaseIntegrationTest;
+import ch.junto.fixtures.ActivityFixture;
 import ch.junto.fixtures.UserFixture;
 import ch.junto.helpers.DatabaseHelper;
+import ch.junto.helpers.MockMvcTestHelper;
 import ch.junto.user.UserRepository;
 import ch.junto.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,13 +14,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockHttpSession;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -46,45 +43,17 @@ class ActivitySpatialQueryIntegrationTest extends BaseIntegrationTest {
     }
 
     private MockHttpSession buildSession(User user) {
-        MockHttpSession session = new MockHttpSession();
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
-        session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
-        return session;
+        return MockMvcTestHelper.sessionFor(user);
     }
 
     private Activity createActivityAt(String title, double lat, double lng, OffsetDateTime startsAt) {
-        Activity a = new Activity();
-        a.setCreator(testUser);
-        a.setTypeSlug("climbing");
-        a.setTitle(title);
-        a.setDescription("Test");
-        a.setCity("Test City");
-        a.setLocationLat(lat);
-        a.setLocationLng(lng);
-        a.setStartsAt(startsAt);
-        a.setMaxParticipants(10);
-        a.setJoinPolicy(JoinPolicy.OPEN);
-        a.getCustomFields().put("style", "Bouldering");
-        a.getCustomFields().put("environment", "Indoor");
-        a.getCustomFields().put("experienceLevel", "Beginner");
-        return dbHelper.save(a);
+        return dbHelper.save(ActivityFixture.newActivityAt(
+            testUser, "climbing", title, lat, lng, startsAt));
     }
 
     private Activity createActivityWithoutLocation(String title, OffsetDateTime startsAt) {
-        Activity a = new Activity();
-        a.setCreator(testUser);
-        a.setTypeSlug("climbing");
-        a.setTitle(title);
-        a.setDescription("Test");
-        a.setCity("Test City");
-        a.setStartsAt(startsAt);
-        a.setMaxParticipants(10);
-        a.setJoinPolicy(JoinPolicy.OPEN);
-        a.getCustomFields().put("style", "Bouldering");
-        a.getCustomFields().put("environment", "Indoor");
-        a.getCustomFields().put("experienceLevel", "Beginner");
-        return dbHelper.save(a);
+        return dbHelper.save(ActivityFixture.newActivityWithoutLocation(
+            testUser, "climbing", title, startsAt));
     }
 
     @Test @DisplayName("default radius (25km) returns only nearby activity")

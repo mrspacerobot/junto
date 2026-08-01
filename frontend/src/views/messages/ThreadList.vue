@@ -1,15 +1,15 @@
 <template>
   <div class="h-full flex flex-col">
     <!-- Header -->
-    <div class="px-4 pb-3">
-      <h1 class="font-display text-2xl text-slate-900 mb-3">Messages</h1>
+    <div class="px-4 pb-3 flex-shrink-0">
+      <h1 class="font-display text-2xl text-slate-900 mb-3 pt-4">Messages</h1>
       <div class="flex items-center gap-2 bg-warm-50 border border-warm-300 rounded-full px-3.5 py-1.5">
         <Search class="w-3.5 h-3.5 text-[#9D998F]" />
         <input
           v-model="search"
           type="text"
           placeholder="Search messages"
-          class="bg-transparent border-none outline-none text-sm text-slate-900 placeholder-[#9D998F] w-full"
+          class="bg-transparent border-none outline-none text-sm text-slate-900 placeholder-[#9D998F] w-full font-sans"
         />
       </div>
     </div>
@@ -24,20 +24,34 @@
         <div
           v-for="thread in filteredThreads"
           :key="thread.activityId"
+          data-testid="message-thread-row"
           @click="$emit('select', thread)"
           :class="[
-            'flex gap-3 px-4 py-3 cursor-pointer transition-colors',
+            'flex gap-2.5 px-4 py-3 cursor-pointer transition-colors',
             activeId === thread.activityId
-              ? 'bg-primary-50 border-l-[3px] border-primary-700'
+              ? 'bg-accent-bg border-l-[3px] border-primary-700'
               : 'border-l-[3px] border-transparent hover:bg-warm-50'
           ]"
         >
-          <!-- Activity image/icon circle -->
-          <div class="w-10 h-10 rounded-xl flex-shrink-0 overflow-hidden"
-               :style="{ background: typeGradient(thread.activityTypeSlug) }">
-            <img v-if="thread.imageUrl" :src="thread.imageUrl" class="w-full h-full object-cover" />
-            <div v-else class="w-full h-full flex items-center justify-center text-white text-xs font-bold uppercase">
-              {{ thread.activityTypeSlug?.slice(0, 2) }}
+          <!-- Activity image/icon -->
+          <div class="relative flex-shrink-0">
+            <div class="w-10 h-10 rounded-full overflow-hidden"
+                 :style="{ background: typeGradient(thread.activityTypeSlug) }">
+              <img v-if="thread.imageUrl" :src="thread.imageUrl" class="w-full h-full object-cover" />
+              <div v-else class="w-full h-full flex items-center justify-center text-white text-xs font-bold uppercase">
+                {{ thread.activityTypeSlug?.slice(0, 2) }}
+              </div>
+            </div>
+            <!-- Participant mini-avatars -->
+            <div v-if="thread.participantAvatars?.length" class="absolute -bottom-0.5 -right-0.5 flex">
+              <div
+                v-for="(avatar, i) in thread.participantAvatars.slice(0, 2)"
+                :key="i"
+                class="w-4 h-4 rounded-full border-[1.5px] border-white overflow-hidden bg-warm-200"
+                :style="{ marginLeft: i > 0 ? '-4px' : '0', zIndex: 2 - i }"
+              >
+                <img v-if="avatar" :src="avatar" class="w-full h-full object-cover" />
+              </div>
             </div>
           </div>
 
@@ -59,6 +73,13 @@
                 </template>
                 <template v-else>No messages yet</template>
               </span>
+              <span
+                v-if="thread.participantCount > 1"
+                class="text-[10px] text-[#9D998F] flex-shrink-0 ml-2"
+              >
+                {{ thread.participantCount }}
+                <Users class="w-2.5 h-2.5 inline -mt-px" />
+              </span>
             </div>
           </div>
         </div>
@@ -69,7 +90,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Search } from 'lucide-vue-next'
+import { Search, Users } from 'lucide-vue-next'
 import type { MessageThread } from '@/composables/useMessageThreads'
 
 const props = defineProps<{

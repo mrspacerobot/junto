@@ -1,17 +1,8 @@
 import { ref, onMounted } from 'vue'
+import { messageGetThreads } from '@/api/generated'
+import { toMessageThread } from '@/api/transforms'
 
-export interface MessageThread {
-  activityId: string
-  activityTitle: string
-  activityTypeSlug: string
-  activityTypeName: string
-  imageUrl: string | null
-  participantCount: number
-  participantAvatars: string[]
-  lastMessageContent: string | null
-  lastMessageSender: string | null
-  lastMessageAt: string | null
-}
+export type MessageThread = ReturnType<typeof toMessageThread>
 
 export function useMessageThreads() {
   const threads = ref<MessageThread[]>([])
@@ -22,17 +13,17 @@ export function useMessageThreads() {
     loading.value = true
     error.value = null
     try {
-      const res = await fetch('/api/messages/threads', { credentials: 'same-origin' })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      threads.value = await res.json()
-    } catch (e: any) {
-      error.value = e.message
+      const response = await messageGetThreads()
+      if (response.error) throw new Error('Unable to load message threads')
+      threads.value = (response.data ?? []).map(toMessageThread)
+    } catch (caught: unknown) {
+      error.value = caught instanceof Error ? caught.message : 'Unable to load message threads'
     } finally {
       loading.value = false
     }
   }
 
-  onMounted(fetchThreads)
+  onMounted(() => { void fetchThreads() })
 
   return { threads, loading, error, refresh: fetchThreads }
 }

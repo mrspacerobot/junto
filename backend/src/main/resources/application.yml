@@ -1,6 +1,6 @@
 spring:
   application:
-    name: onda
+    name: junto
   session:
     jdbc:
       initialize-schema: never
@@ -21,9 +21,15 @@ spring:
     api-docs:
       path: /v3/api-docs
 
+app:
+  allowed-origin: http://localhost:5173
+  base-url: http://localhost:5173
+  scheduling:
+    enabled: true
+
 logging:
   level:
-    com.onda: DEBUG
+    ch.junto: DEBUG
     org.springframework.security: WARN
     org.hibernate.SQL: DEBUG
   pattern:

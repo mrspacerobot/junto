@@ -1,17 +1,17 @@
 package ch.junto.activity;
 
 import ch.junto.activity.entity.Activity;
-import ch.junto.activity.enums.ActivityStatus;
-import ch.junto.activity.enums.JoinPolicy;
-import ch.junto.activity.entity.CustomFields;
 import ch.junto.base.TestContainerConfig;
 import ch.junto.chat.ChatMessageRepository;
+import ch.junto.fixtures.ActivityFixture;
+import ch.junto.fixtures.ActivityParticipantFixture;
+import ch.junto.fixtures.UserFixture;
+import ch.junto.helpers.MockMvcTestHelper;
 import ch.junto.participant.ParticipantRepository;
+import ch.junto.participant.enums.ParticipantRole;
 import ch.junto.participant.enums.ParticipantStatus;
 import ch.junto.user.UserRepository;
 import ch.junto.user.entity.User;
-import ch.junto.user.enums.UserRole;
-import ch.junto.user.enums.UserStatus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,20 +19,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.mock.web.MockHttpSession;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -62,45 +58,101 @@ class ActivityConcurrencyTest extends TestContainerConfig {
     }
 
     private User createAndTrackUser(String email) {
-        User user = new User();
-        user.setEmail(email);
-        user.setDisplayName(email.split("@")[0]);
-        user.setRole(UserRole.MEMBER);
-        user.setStatus(UserStatus.ACTIVE);
-        user.setOnboarded(true);
-        user.setInviteCodesRemaining(5);
-        user = userRepository.save(user);
+        User user = userRepository.save(UserFixture.newMember(email));
         createdUserIds.add(user.getId());
         return user;
     }
 
     private Activity createAndTrackActivity(User creator, int maxParticipants) {
-        Activity activity = new Activity();
-        activity.setCreator(creator);
-        activity.setTypeSlug("climbing");
+        Activity activity = ActivityFixture.newClimbingActivity(creator);
         activity.setTitle("Concurrency Test");
         activity.setDescription("Test");
         activity.setCity("Zurich");
-        activity.setStartsAt(OffsetDateTime.now().plusDays(1));
         activity.setMaxParticipants(maxParticipants);
-        activity.setJoinPolicy(JoinPolicy.OPEN);
-        activity.setStatus(ActivityStatus.ACTIVE);
-        CustomFields fields = new CustomFields();
-        fields.put("style", "Bouldering");
-        fields.put("environment", "Indoor");
-        fields.put("experienceLevel", "Beginner");
-        activity.setCustomFields(fields);
         activity = activityRepository.save(activity);
         createdActivityIds.add(activity.getId());
         return activity;
     }
 
     private MockHttpSession buildSession(User user) {
-        MockHttpSession session = new MockHttpSession();
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
-        session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
-        return session;
+        return MockMvcTestHelper.sessionFor(user);
+    }
+
+    @Test
+    @DisplayName("join racing a capacity reduction preserves the capacity invariant")
+    void joinRacingCapacityReductionPreservesInvariant() throws Exception {
+        User creator = createAndTrackUser("creator-reduce-" + UUID.randomUUID() + "@junto.app");
+        User joiner = createAndTrackUser("joiner-reduce-" + UUID.randomUUID() + "@junto.app");
+        Activity activity = createAndTrackActivity(creator, 2);
+        participantRepository.save(ActivityParticipantFixture.participant(
+            activity, creator, ParticipantRole.CREATOR, ParticipantStatus.APPROVED));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch go = new CountDownLatch(1);
+        Future<Integer> join = executor.submit(() -> {
+            ready.countDown();
+            go.await();
+            return mockMvc.perform(post("/api/activities/" + activity.getId() + "/participants/join")
+                    .session(buildSession(joiner)))
+                .andReturn().getResponse().getStatus();
+        });
+        Future<Integer> reduce = executor.submit(() -> {
+            ready.countDown();
+            go.await();
+            String body = """
+                {"title":"Concurrency Test","description":"Test","city":"Zurich",
+                 "locationLat":null,"locationLng":null,"startsAt":"%s",
+                 "signupDeadline":null,"maxParticipants":1,"joinPolicy":"OPEN","customFields":{}}
+                """.formatted(activity.getStartsAt());
+            return mockMvc.perform(put("/api/activities/" + activity.getId())
+                    .session(buildSession(creator))
+                    .contentType("application/json")
+                    .content(body))
+                .andReturn().getResponse().getStatus();
+        });
+
+        ready.await();
+        go.countDown();
+        assertThat(List.of(join.get(10, TimeUnit.SECONDS), reduce.get(10, TimeUnit.SECONDS)))
+            .containsExactlyInAnyOrder(200, 409);
+        executor.shutdown();
+
+        Activity reloaded = activityRepository.findById(activity.getId()).orElseThrow();
+        long approved = participantRepository.countByActivityIdAndStatus(
+            activity.getId(), ParticipantStatus.APPROVED);
+        assertThat(approved).isLessThanOrEqualTo(reloaded.getMaxParticipants());
+    }
+
+    @Test
+    @DisplayName("concurrent terminal transitions cannot overwrite each other")
+    void concurrentTerminalTransitionsAreSerialized() throws Exception {
+        User creator = createAndTrackUser("creator-transition-" + UUID.randomUUID() + "@junto.app");
+        Activity activity = createAndTrackActivity(creator, 4);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch go = new CountDownLatch(1);
+
+        Future<Integer> cancel = executor.submit(() -> {
+            ready.countDown();
+            go.await();
+            return mockMvc.perform(post("/api/activities/" + activity.getId() + "/cancel")
+                    .session(buildSession(creator)))
+                .andReturn().getResponse().getStatus();
+        });
+        Future<Integer> complete = executor.submit(() -> {
+            ready.countDown();
+            go.await();
+            return mockMvc.perform(post("/api/activities/" + activity.getId() + "/complete")
+                    .session(buildSession(creator)))
+                .andReturn().getResponse().getStatus();
+        });
+
+        ready.await();
+        go.countDown();
+        assertThat(List.of(cancel.get(10, TimeUnit.SECONDS), complete.get(10, TimeUnit.SECONDS)))
+            .containsExactlyInAnyOrder(200, 409);
+        executor.shutdown();
     }
 
     @Test @DisplayName("concurrent joins should not exceed maxParticipants")

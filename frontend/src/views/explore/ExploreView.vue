@@ -68,7 +68,8 @@ import ActivityCard from '@/components/activity/ActivityCard.vue'
 import MapPanel from '@/components/map/MapPanel.vue'
 import { useActivityTypes } from '@/composables/useActivityTypes'
 import { usePagination } from '@/composables/usePagination'
-import { list1 } from '@/api/generated'
+import { activityList } from '@/api/generated'
+import { toActivityListItem } from '@/api/transforms'
 
 const { activityTypes } = useActivityTypes()
 const activeFilter = ref<string | null>('all')
@@ -86,15 +87,15 @@ function setFilter(slug: string | null) {
 
 const fetchActivities = async (cursor?: string) => {
   const typeFilter = activeFilter.value === 'all' ? undefined : activeFilter.value
-  const response = await list1({
+  const response = await activityList({
     query: {
-      activityTypeId: typeFilter || undefined,
+      typeSlug: typeFilter || undefined,
       cursor,
       limit: 12
     }
   })
   return {
-    data: response.data?.data || [],
+    data: (response.data?.data ?? []).map(toActivityListItem),
     nextCursor: response.data?.nextCursor
   }
 }

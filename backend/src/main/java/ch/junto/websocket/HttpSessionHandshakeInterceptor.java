@@ -3,8 +3,6 @@ package ch.junto.websocket;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
@@ -20,10 +18,6 @@ public class HttpSessionHandshakeInterceptor implements HandshakeInterceptor {
             if (session != null) {
                 attributes.put("HTTP_SESSION_ID", session.getId());
             }
-        }
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated()) {
-            attributes.put("AUTHENTICATED_USER", auth.getPrincipal());
         }
         return true;
     }

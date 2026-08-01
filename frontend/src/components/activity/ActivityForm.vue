@@ -4,19 +4,19 @@
       <!-- Basic Info -->
       <div class="space-y-6">
         <h3 class="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">Basic Information</h3>
-        
+
         <div class="space-y-2">
           <label class="text-sm font-semibold text-slate-700">Activity Type</label>
           <div class="grid grid-cols-3 gap-3">
-             <button 
-              v-for="type in types" 
-              :key="type.id"
+             <button
+              v-for="type in types"
+              :key="type.slug"
               type="button"
-              @click="form.activityTypeId = type.id"
+              @click="form.typeSlug = type.slug"
               :class="[
                 'flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all',
-                form.activityTypeId === type.id 
-                  ? 'border-primary-500 bg-primary-50 text-primary-700' 
+                form.typeSlug === type.slug
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
                   : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
               ]"
             >
@@ -27,9 +27,9 @@
 
         <div class="space-y-2">
           <label class="text-sm font-semibold text-slate-700">Title</label>
-          <input 
+          <input
             v-model="form.title"
-            type="text" 
+            type="text"
             required
             placeholder="e.g. Morning Bouldering at The Spot"
             class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all"
@@ -38,7 +38,7 @@
 
         <div class="space-y-2">
           <label class="text-sm font-semibold text-slate-700">Description</label>
-          <textarea 
+          <textarea
             v-model="form.description"
             rows="4"
             placeholder="Tell us more about the activity..."
@@ -50,22 +50,22 @@
       <!-- Logistics -->
       <div class="space-y-6">
         <h3 class="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">Logistics</h3>
-        
+
         <div class="grid grid-cols-2 gap-4">
           <div class="space-y-2">
             <label class="text-sm font-semibold text-slate-700">Date & Time</label>
-            <input 
+            <input
               v-model="form.startsAt"
-              type="datetime-local" 
+              type="datetime-local"
               required
               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all"
             />
           </div>
           <div class="space-y-2">
             <label class="text-sm font-semibold text-slate-700">City</label>
-            <input 
+            <input
               v-model="form.city"
-              type="text" 
+              type="text"
               required
               placeholder="e.g. Boulder"
               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all"
@@ -76,9 +76,9 @@
         <div class="grid grid-cols-2 gap-4">
           <div class="space-y-2">
             <label class="text-sm font-semibold text-slate-700">Max Participants</label>
-            <input 
+            <input
               v-model.number="form.maxParticipants"
-              type="number" 
+              type="number"
               min="2"
               max="50"
               required
@@ -87,7 +87,7 @@
           </div>
           <div class="space-y-2">
             <label class="text-sm font-semibold text-slate-700">Join Policy</label>
-            <select 
+            <select
               v-model="form.joinPolicy"
               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all"
             >
@@ -99,25 +99,25 @@
 
         <div class="space-y-2">
           <label class="text-sm font-semibold text-slate-700">Signup Deadline (Optional)</label>
-          <input 
+          <input
             v-model="form.signupDeadline"
-            type="datetime-local" 
+            type="datetime-local"
             class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all"
           />
           <p class="text-xs text-slate-400 italic">Defaults to activity start time if not set.</p>
         </div>
       </div>
-      
+
       <!-- Custom Fields (Dynamic) -->
       <div v-if="selectedType?.customFields?.length" class="space-y-6 md:col-span-2">
         <h3 class="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">Activity Specific Details</h3>
-        
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div v-for="field in selectedType.customFields" :key="field.name" class="space-y-2">
             <label class="text-sm font-semibold text-slate-700">
               {{ field.label }} <span v-if="field.required" class="text-red-500">*</span>
             </label>
-            
+
             <template v-if="field.type === 'SELECT'">
               <select
                 v-model="form.customFields[field.name]"
@@ -147,7 +147,7 @@
                   :required="field.required"
                   class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                 />
-                <span class="text-sm font-medium text-slate-500 min-w-fit">{{ unitLabels[field.unit] }}</span>
+                <span class="text-sm font-medium text-slate-500 min-w-fit">{{ field.unit ? (unitLabels[field.unit] ?? field.unit) : '' }}</span>
               </div>
             </template>
 
@@ -175,13 +175,15 @@
             <template v-else-if="field.type === 'DATE_RANGE'">
               <div class="grid grid-cols-2 gap-2">
                 <input
-                  v-model="form.customFields[field.name].start"
+                  :value="dateRangeValue(field.name).start"
+                  @input="setDateRangePart(field.name, 'start', $event)"
                   type="date"
                   :required="field.required"
                   class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                 />
                 <input
-                  v-model="form.customFields[field.name].end"
+                  :value="dateRangeValue(field.name).end"
+                  @input="setDateRangePart(field.name, 'end', $event)"
                   type="date"
                   :required="field.required"
                   class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all"
@@ -204,14 +206,14 @@
     </div>
 
     <div class="pt-6 border-t border-slate-100 flex justify-end gap-4">
-      <button 
+      <button
         type="button"
         @click="$router.back()"
         class="px-6 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors"
       >
         Cancel
       </button>
-      <button 
+      <button
         type="submit"
         :disabled="loading"
         class="px-10 py-3 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 disabled:opacity-50 transition-all shadow-md shadow-primary-100"
@@ -224,13 +226,18 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import type {
+  ActivityFormValues,
+  ActivityTypeOption,
+  DateRangeValue,
+} from '@/api/transforms'
 
 const props = defineProps<{
-  types: any[]
+  types: ActivityTypeOption[]
   loading?: boolean
 }>()
 
-const emit = defineEmits(['submit'])
+defineEmits<{ submit: [form: ActivityFormValues] }>()
 
 const unitLabels: Record<string, string> = {
   KM: 'km',
@@ -242,33 +249,50 @@ const unitLabels: Record<string, string> = {
   SETS: 'sets',
   REPS: 'reps',
   KG: 'kg',
-  LBS: 'lbs'
+  LBS: 'lbs',
 }
 
-const form = ref({
+const form = ref<ActivityFormValues>({
   title: '',
   description: '',
-  activityTypeId: props.types[0]?.id || '',
+  typeSlug: props.types[0]?.slug ?? '',
   city: '',
   startsAt: '',
   signupDeadline: '',
   maxParticipants: 10,
   joinPolicy: 'OPEN',
-  customFields: {} as Record<string, any>
+  customFields: {},
 })
 
-const selectedType = computed(() => {
-  return props.types.find(t => t.id === form.value.activityTypeId)
-})
+const selectedType = computed(() =>
+  props.types.find(type => type.slug === form.value.typeSlug),
+)
 
-watch(() => form.value.activityTypeId, () => {
+watch(() => props.types, types => {
+  if (!form.value.typeSlug && types.length > 0) {
+    form.value.typeSlug = types[0].slug
+  }
+}, { immediate: true })
+
+watch(() => form.value.typeSlug, () => {
   form.value.customFields = {}
-  // Initialize DATE_RANGE fields with empty objects before template renders
-  const selected = props.types.find(t => t.id === form.value.activityTypeId)
-  selected?.customFields?.forEach((field: any) => {
+  selectedType.value?.customFields.forEach(field => {
     if (field.type === 'DATE_RANGE') {
       form.value.customFields[field.name] = { start: '', end: '' }
     }
   })
 })
+
+function dateRangeValue(fieldName: string): DateRangeValue {
+  const value = form.value.customFields[fieldName]
+  return typeof value === 'object' ? value : { start: '', end: '' }
+}
+
+function setDateRangePart(fieldName: string, part: keyof DateRangeValue, event: Event) {
+  const input = event.target as HTMLInputElement
+  form.value.customFields[fieldName] = {
+    ...dateRangeValue(fieldName),
+    [part]: input.value,
+  }
+}
 </script>

@@ -1,14 +1,14 @@
 services:
   postgres:
-    image: postgis/postgis:16-3.4
+    image: postgis/postgis:16-3.4-alpine
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: onda
-      POSTGRES_USER: onda
-      POSTGRES_PASSWORD: onda
+      POSTGRES_DB: junto
+      POSTGRES_USER: junto
+      POSTGRES_PASSWORD: junto
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - junto_pgdata:/var/lib/postgresql/data
 
   mailpit:
     image: axllent/mailpit
@@ -20,4 +20,5 @@ services:
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
 
 volumes:
-  pgdata:
+  # A distinct volume deliberately leaves any historical Onda pgdata untouched.
+  junto_pgdata:

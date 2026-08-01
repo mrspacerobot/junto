@@ -16,8 +16,12 @@ spring:
       mail.smtp.starttls.enable: true
 logging:
   level:
-    com.onda: INFO
+    ch.junto: INFO
     org.hibernate.SQL: WARN
+app:
+  allowed-origin: ${APP_BASE_URL}
+  base-url: ${APP_BASE_URL}
+
 springdoc:
   api-docs:
     enabled: false

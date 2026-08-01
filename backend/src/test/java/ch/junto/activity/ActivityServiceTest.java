@@ -134,7 +134,7 @@ class ActivityServiceTest {
             OffsetDateTime.now().plusDays(2), null, null, null, null
         );
 
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
         when(activityRepository.save(any(Activity.class))).thenReturn(activity);
 
         ActivityDetailResponse response = activityService.update(activity.getId(), request, creator);
@@ -155,7 +155,7 @@ class ActivityServiceTest {
             OffsetDateTime.now().plusDays(2), null, null, null, null
         );
 
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
 
         assertThatThrownBy(() -> activityService.update(activity.getId(), request, otherUser))
             .isInstanceOf(ForbiddenException.class);
@@ -170,7 +170,7 @@ class ActivityServiceTest {
             OffsetDateTime.now().plusDays(2), null, null, null, null
         );
 
-        when(activityRepository.findById(id)).thenReturn(Optional.empty());
+        when(activityRepository.findByIdWithLock(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> activityService.update(id, request, user))
             .isInstanceOf(NotFoundException.class);
@@ -181,7 +181,7 @@ class ActivityServiceTest {
         User creator = UserFixture.defaultUser();
         Activity activity = ActivityFixture.defaultActivity(creator, "climbing");
 
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
         when(activityRepository.save(any(Activity.class))).thenReturn(activity);
 
         activityService.cancel(activity.getId(), creator);
@@ -197,7 +197,7 @@ class ActivityServiceTest {
         otherUser.setId(UUID.randomUUID());
         Activity activity = ActivityFixture.defaultActivity(creator, "climbing");
 
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
 
         assertThatThrownBy(() -> activityService.cancel(activity.getId(), otherUser))
             .isInstanceOf(ForbiddenException.class);
@@ -206,7 +206,7 @@ class ActivityServiceTest {
     @Test
     void cancel_notFound_throwsNotFoundException() {
         UUID id = UUID.randomUUID();
-        when(activityRepository.findById(id)).thenReturn(Optional.empty());
+        when(activityRepository.findByIdWithLock(id)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> activityService.cancel(id, UserFixture.defaultUser()))
             .isInstanceOf(NotFoundException.class);
     }
@@ -216,7 +216,7 @@ class ActivityServiceTest {
         User creator = UserFixture.defaultUser();
         Activity activity = ActivityFixture.defaultActivity(creator, "climbing");
 
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
         when(activityRepository.save(any(Activity.class))).thenReturn(activity);
 
         activityService.complete(activity.getId(), creator);
@@ -232,7 +232,7 @@ class ActivityServiceTest {
         otherUser.setId(UUID.randomUUID());
         Activity activity = ActivityFixture.defaultActivity(creator, "climbing");
 
-        when(activityRepository.findById(activity.getId())).thenReturn(Optional.of(activity));
+        when(activityRepository.findByIdWithLock(activity.getId())).thenReturn(Optional.of(activity));
 
         assertThatThrownBy(() -> activityService.complete(activity.getId(), otherUser))
             .isInstanceOf(ForbiddenException.class);
@@ -241,7 +241,7 @@ class ActivityServiceTest {
     @Test
     void complete_notFound_throwsNotFoundException() {
         UUID id = UUID.randomUUID();
-        when(activityRepository.findById(id)).thenReturn(Optional.empty());
+        when(activityRepository.findByIdWithLock(id)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> activityService.complete(id, UserFixture.defaultUser()))
             .isInstanceOf(NotFoundException.class);
     }

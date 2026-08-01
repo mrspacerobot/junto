@@ -21,8 +21,19 @@ import { iconMap, DEFAULT_ICON } from '@/generated/icon-map'
 /** Default map center: Zürich, Switzerland. Override via center prop. */
 const ZURICH_CENTER: [number, number] = [47.3769, 8.5417]
 
+interface MapActivity {
+  id: string
+  title: string
+  city?: string
+  startsAt: string
+  locationLat?: number
+  locationLng?: number
+  currentParticipants?: number
+  activityTypeIconName?: string
+}
+
 const props = withDefaults(defineProps<{
-  activities?: any[]
+  activities?: MapActivity[]
   center?: [number, number]
 }>(), {
   activities: () => []
@@ -33,9 +44,16 @@ const mapContainer = ref<HTMLDivElement>()
 let map: L.Map | null = null
 let markerLayer: L.LayerGroup | null = null
 
-const hasCoords = computed(() =>
-  props.activities.some(a => a.locationLat != null && a.locationLng != null)
-)
+const hasValidCoordinates = (activity: MapActivity) =>
+  activity.locationLat != null && activity.locationLng != null
+  && activity.locationLat >= -90 && activity.locationLat <= 90
+  && activity.locationLng >= -180 && activity.locationLng <= 180
+
+const activitiesWithCoords = computed(() => props.activities.filter(hasValidCoordinates))
+const hasCoords = computed(() => activitiesWithCoords.value.length > 0)
+const markerVersion = computed(() => activitiesWithCoords.value
+  .map(activity => `${activity.id}:${activity.locationLat}:${activity.locationLng}:${activity.title}`)
+  .join('|'))
 
 function escapeHtml(str: string): string {
   return str
@@ -71,7 +89,7 @@ function createMarkerIcon(iconName?: string): L.DivIcon {
   })
 }
 
-function createPopupContent(activity: any): string {
+function createPopupContent(activity: MapActivity): string {
   const title = escapeHtml(activity.title || 'Untitled')
   const city = escapeHtml(activity.city || 'TBD')
   const id = escapeHtmlAttr(activity.id || '')
@@ -145,16 +163,12 @@ function updateMarkers() {
 
   markerLayer.clearLayers()
 
-  const activitiesWithCoords = props.activities.filter(
-    a => a.locationLat != null && a.locationLng != null
-  )
-
-  if (activitiesWithCoords.length === 0) return
+  if (activitiesWithCoords.value.length === 0) return
 
   const bounds = L.latLngBounds([])
 
-  for (const activity of activitiesWithCoords) {
-    const latlng = L.latLng(activity.locationLat, activity.locationLng)
+  for (const activity of activitiesWithCoords.value) {
+    const latlng = L.latLng(activity.locationLat!, activity.locationLng!)
     bounds.extend(latlng)
 
     const marker = L.marker(latlng, {
@@ -191,8 +205,8 @@ watch(hasCoords, (val) => {
   }
 })
 
-// Update markers when activities change (parent replaces the array on each refetch)
-watch(() => props.activities, () => {
+// Track coordinate-bearing content, including in-place pagination appends.
+watch(markerVersion, () => {
   nextTick(() => updateMarkers())
 })
 

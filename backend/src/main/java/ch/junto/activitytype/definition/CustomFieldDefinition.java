@@ -1,7 +1,7 @@
 package ch.junto.activitytype.definition;
 
-import ch.junto.activitytype.model.FieldType;
-import ch.junto.activitytype.model.Unit;
+import ch.junto.activitytype.enums.FieldType;
+import ch.junto.activitytype.enums.Unit;
 import java.util.List;
 
 public record CustomFieldDefinition(

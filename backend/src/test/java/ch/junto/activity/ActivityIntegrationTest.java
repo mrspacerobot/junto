@@ -10,6 +10,8 @@ import ch.junto.base.BaseIntegrationTest;
 import ch.junto.fixtures.ActivityFixture;
 import ch.junto.fixtures.UserFixture;
 import ch.junto.helpers.DatabaseHelper;
+import ch.junto.helpers.MockMvcTestHelper;
+import ch.junto.participant.ParticipantService;
 import ch.junto.user.UserRepository;
 import ch.junto.user.entity.User;
 import tools.jackson.databind.ObjectMapper;
@@ -19,10 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -39,6 +37,7 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
     @Autowired private DatabaseHelper dbHelper;
     @Autowired private UserRepository userRepository;
     @Autowired private ActivityRepository activityRepository;
+    @Autowired private ParticipantService participantService;
 
     private User testUser;
 
@@ -48,16 +47,11 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
     }
 
     private String json(Object dto) {
-        try { return objectMapper.writeValueAsString(dto); }
-        catch (Exception e) { throw new RuntimeException(e); }
+        return MockMvcTestHelper.json(objectMapper, dto);
     }
 
     private MockHttpSession buildSession(User user) {
-        MockHttpSession session = new MockHttpSession();
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
-        session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
-        return session;
+        return MockMvcTestHelper.sessionFor(user);
     }
 
     @Test @DisplayName("should create activity successfully")
@@ -335,6 +329,47 @@ class ActivityIntegrationTest extends BaseIntegrationTest {
                 .param("typeSlug", "climbing")
                 .param("customFields[nonexistent]", "Value"))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should reject malformed activity cursors")
+    void shouldRejectMalformedCursor() throws Exception {
+        mockMvc.perform(get("/api/activities")
+                .session(buildSession(testUser))
+                .param("cursor", "not-a-valid-cursor"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error.code").value("INVALID_CURSOR"));
+    }
+
+    @Test @DisplayName("should reject radius without a search origin")
+    void shouldRejectRadiusWithoutOrigin() throws Exception {
+        mockMvc.perform(get("/api/activities")
+                .session(buildSession(testUser))
+                .param("radiusKm", "10"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test @DisplayName("should honor true and false joinable filters")
+    void shouldFilterByJoinability() throws Exception {
+        Activity joinable = dbHelper.save(ActivityFixture.newActivity(testUser, "climbing"));
+        participantService.addCreator(joinable, testUser);
+        Activity full = ActivityFixture.newActivity(testUser, "cycling");
+        full.setMaxParticipants(1);
+        full = dbHelper.save(full);
+        participantService.addCreator(full, testUser);
+
+        mockMvc.perform(get("/api/activities")
+                .session(buildSession(testUser))
+                .param("joinable", "true"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].id").value(joinable.getId().toString()))
+            .andExpect(jsonPath("$.data.length()").value(1));
+
+        mockMvc.perform(get("/api/activities")
+                .session(buildSession(testUser))
+                .param("joinable", "false"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].id").value(full.getId().toString()))
+            .andExpect(jsonPath("$.data.length()").value(1));
     }
 
     @Test @DisplayName("should reactivate cancelled activity")

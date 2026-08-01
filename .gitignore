@@ -1,9 +1,26 @@
 .env
+
+# Build and dependency output
 backend/build/
+backend/bin/
 backend/.gradle/
 frontend/node_modules/
 frontend/dist/
-.superpowers/
+
+# Test and browser artifacts
+.playwright-mcp/
+frontend/test-results/
+
+# IDE and agent-local state
 .idea/
+.vscode/
 .claude/
+.superpowers/
 .worktrees/
+.tooling/
+backend/.classpath
+backend/.project
+backend/.settings/
+
+# Generated diagnostic output
+backend/deps.txt
