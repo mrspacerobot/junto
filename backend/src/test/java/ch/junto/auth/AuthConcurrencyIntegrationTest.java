@@ -36,7 +36,7 @@ class AuthConcurrencyIntegrationTest extends TestContainerConfig {
     void concurrentWrongGuessesAtomicallyStopAtFiveAttempts() throws Exception {
         String email = "otp-race-" + UUID.randomUUID() + "@junto.app";
         userRepository.save(UserFixture.newMember(email));
-        authService.requestCode(email, null);
+        authService.requestSignInCode(email);
 
         runConcurrently(10, index -> {
             String guess = String.format("%06d", 800000 + index);

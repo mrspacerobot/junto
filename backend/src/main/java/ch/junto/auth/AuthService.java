@@ -10,6 +10,7 @@ import ch.junto.user.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,30 +45,44 @@ public class AuthService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * Sign-in deliberately keeps the same public response for known and unknown
+     * email addresses. Only active existing accounts receive a code.
+     */
     @Transactional
-    public void requestCode(String email, String inviteCode) {
+    public void requestSignInCode(String email) {
         String normalizedEmail = normalizeEmail(email);
+        Optional<User> existingUser = userService.findByEmail(normalizedEmail);
+        if (existingUser.isEmpty() || existingUser.get().getStatus() != UserStatus.ACTIVE) {
+            log.info("Sign-in code request accepted without issuing a token");
+            return;
+        }
 
+        issueCode(normalizedEmail, null);
+    }
+
+    /**
+     * Signup errors depend only on explicit create-account intent and the
+     * submitted invite, never on whether the email already has an account.
+     */
+    @Transactional
+    public void requestSignupCode(String email, String inviteCode) {
+        if (inviteCode == null || inviteCode.isBlank()) {
+            throw new ApiException("INVITE_REQUIRED",
+                "An invite code is required to create an account.", 400);
+        }
+
+        String normalizedInviteCode = inviteCode.trim();
+        inviteService.validateSignupCode(normalizedInviteCode);
+        issueCode(normalizeEmail(email), normalizedInviteCode);
+    }
+
+    private void issueCode(String normalizedEmail, String inviteCode) {
         // A transaction-scoped advisory lock prevents concurrent requests for
         // the same email from racing the delete/insert token replacement.
         jdbcTemplate.queryForObject(
             "SELECT pg_advisory_xact_lock(hashtext(?))", Object.class, normalizedEmail);
 
-        Optional<User> existingUser = userService.findByEmail(normalizedEmail);
-
-        // Keep the public response generic so request-code cannot enumerate
-        // accounts. No token or email is produced when signup prerequisites fail.
-        if (existingUser.isEmpty()) {
-            if (inviteCode == null || inviteCode.isBlank() || !inviteService.isValidCode(inviteCode)) {
-                log.info("Auth code request accepted without issuing a token");
-                return;
-            }
-        } else if (existingUser.get().getStatus() != UserStatus.ACTIVE) {
-            log.info("Auth code request accepted for an inactive account");
-            return;
-        }
-
-        // Invalidate any previous unused tokens for this email
         authTokenRepository.deleteUnusedByEmail(normalizedEmail);
 
         String code = String.format("%06d", secureRandom.nextInt(1000000));
@@ -78,13 +93,16 @@ public class AuthService {
         authToken.setToken(token);
         authToken.setCode(code);
         authToken.setExpiresAt(OffsetDateTime.now().plusMinutes(CODE_EXPIRY_MINUTES));
-
-        if (existingUser.isEmpty() && inviteCode != null) {
-            authToken.setInviteCode(inviteCode);
-        }
+        authToken.setInviteCode(inviteCode);
 
         authTokenRepository.saveAndFlush(authToken);
-        emailService.sendAuthCode(normalizedEmail, code, token.toString());
+        try {
+            emailService.sendAuthCode(normalizedEmail, code, token.toString());
+        } catch (MailException exception) {
+            log.error("Failed to deliver authentication email", exception);
+            throw new ApiException("EMAIL_DELIVERY_FAILED",
+                "We couldn't send your code. Please try again.", 503);
+        }
         log.info("Auth code requested");
     }
 

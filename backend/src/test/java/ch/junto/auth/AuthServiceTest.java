@@ -16,6 +16,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mail.MailSendException;
 
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,23 +43,35 @@ class AuthServiceTest {
     @Captor ArgumentCaptor<AuthToken> tokenCaptor;
 
     @Test
-    void unknownEmailWithoutValidInviteReturnsGenericSuccessWithoutIssuingToken() {
+    void unknownSignInReturnsGenericSuccessWithoutIssuingToken() {
         when(userService.findByEmail("new@junto.app")).thenReturn(Optional.empty());
 
-        authService.requestCode("new@junto.app", null);
+        authService.requestSignInCode("new@junto.app");
 
         verify(authTokenRepository, never()).saveAndFlush(any());
         verify(emailService, never()).sendAuthCode(anyString(), anyString(), anyString());
     }
 
     @Test
+    void signupWithoutInviteFailsBeforeLookingUpAccount() {
+        assertThatThrownBy(() -> authService.requestSignupCode("new@junto.app", "  "))
+            .isInstanceOf(ApiException.class)
+            .satisfies(exception -> assertThat(((ApiException) exception).getCode())
+                .isEqualTo("INVITE_REQUIRED"));
+
+        verify(userService, never()).findByEmail(anyString());
+        verify(inviteService, never()).validateSignupCode(anyString());
+        verify(authTokenRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void validInviteIssuesTokenForNormalizedEmail() {
-        when(userService.findByEmail("new@junto.app")).thenReturn(Optional.empty());
-        when(inviteService.isValidCode("JUNTO-ABC123")).thenReturn(true);
         when(authTokenRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        authService.requestCode("  New@Junto.App ", "JUNTO-ABC123");
+        authService.requestSignupCode("  New@Junto.App ", " JUNTO-ABC123 ");
 
+        verify(inviteService).validateSignupCode("JUNTO-ABC123");
+        verify(userService, never()).findByEmail(anyString());
         verify(authTokenRepository).deleteUnusedByEmail("new@junto.app");
         verify(authTokenRepository).saveAndFlush(tokenCaptor.capture());
         assertThat(tokenCaptor.getValue().getInviteCode()).isEqualTo("JUNTO-ABC123");
@@ -65,14 +79,28 @@ class AuthServiceTest {
     }
 
     @Test
-    void inactiveAccountUsesSameGenericNoTokenPath() {
+    void inactiveAccountUsesSameGenericSignInPath() {
         User suspended = UserFixture.suspended();
         when(userService.findByEmail("suspended@junto.app")).thenReturn(Optional.of(suspended));
 
-        authService.requestCode("suspended@junto.app", null);
+        authService.requestSignInCode("suspended@junto.app");
 
         verify(authTokenRepository, never()).saveAndFlush(any());
         verify(emailService, never()).sendAuthCode(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void mailFailureIsActionableAndPropagatesForTransactionRollback() {
+        doThrow(new MailSendException("smtp unavailable"))
+            .when(emailService).sendAuthCode(eq("new@junto.app"), anyString(), anyString());
+
+        assertThatThrownBy(() -> authService.requestSignupCode("new@junto.app", "JUNTO-ABC123"))
+            .isInstanceOf(ApiException.class)
+            .satisfies(exception -> {
+                ApiException apiException = (ApiException) exception;
+                assertThat(apiException.getCode()).isEqualTo("EMAIL_DELIVERY_FAILED");
+                assertThat(apiException.getStatus()).isEqualTo(503);
+            });
     }
 
     @Test
