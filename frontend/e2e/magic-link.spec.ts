@@ -30,6 +30,23 @@ async function waitForMagicLink(request: APIRequestContext, email: string): Prom
   throw new Error(`Magic-link email was not delivered to ${email}`)
 }
 
+test('generic signup response does not falsely claim code delivery without an invite', async ({ page, request }) => {
+  const email = uniqueEmail()
+  await page.goto('/auth/login')
+  await page.getByLabel('Email address').fill(email)
+  await page.getByRole('button', { name: 'Continue' }).click()
+
+  await expect(page.getByText(`If this email belongs to an existing account, enter the 6-digit code sent to ${email}.`)).toBeVisible()
+  await expect(page.getByText('New members without an invite code should go back and add one.')).toBeVisible()
+
+  const listResponse = await request.get('http://localhost:8025/api/v1/messages')
+  expect(listResponse.ok()).toBe(true)
+  const listing = await listResponse.json() as { messages?: MailpitMessage[] }
+  expect(listing.messages?.some(message =>
+    message.To?.some(recipient => recipient.Address === email),
+  )).toBe(false)
+})
+
 test('a customer can complete the emailed magic-link flow', async ({ page, request }) => {
   const email = uniqueEmail()
   await login(page, email)

@@ -6,7 +6,7 @@
         Welcome to Junto
       </h2>
       <p class="mt-2 text-sm text-[#6A6560]">
-        {{ step === 'EMAIL' ? 'Sign in or create an account to get started.' : 'Enter the 6-digit code sent to your email.' }}
+        {{ step === 'EMAIL' ? 'Sign in or create an account to get started.' : verificationPrompt }}
       </p>
     </div>
 
@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { authRequestCode, authVerify } from '@/api/generated/sdk.gen';
@@ -110,6 +110,17 @@ const inviteCode = ref('');
 const code = ref('');
 const loading = ref(false);
 const error = ref('');
+
+const verificationPrompt = computed(() => {
+  const destination = email.value.trim();
+  const eligibility = inviteCode.value.trim()
+    ? 'this email and invite are eligible'
+    : 'this email belongs to an existing account';
+  const inviteGuidance = inviteCode.value.trim()
+    ? ''
+    : ' New members without an invite code should go back and add one.';
+  return `If ${eligibility}, enter the 6-digit code sent to ${destination}.${inviteGuidance}`;
+});
 
 const handleRequestCode = async () => {
   loading.value = true;
