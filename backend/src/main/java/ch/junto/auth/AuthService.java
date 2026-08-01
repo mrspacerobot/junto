@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
@@ -58,7 +59,16 @@ public class AuthService {
             return;
         }
 
-        issueCode(normalizedEmail, null);
+        try {
+            issueCode(normalizedEmail, null);
+        } catch (ApiException ex) {
+            if ("EMAIL_DELIVERY_FAILED".equals(ex.getCode())) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                log.warn("Sign-in code delivery failed; returning generic response");
+                return;
+            }
+            throw ex;
+        }
     }
 
     /**

@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -74,5 +75,31 @@ class AuthEmailFailureIntegrationTest extends TestContainerConfig {
         assertThat(authTokenRepository
             .findFirstByEmailAndUsedAtIsNullOrderByCreatedAtDesc(email)).isEmpty();
         assertThat(inviteCodeRepository.findByCode(inviteCode).orElseThrow().isUsed()).isFalse();
+    }
+
+    @Test
+    void signInSmtpFailureReturnsGenericOkAndNoPersistedToken() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String email = "signin-smtp-" + suffix + "@junto.app";
+
+        userRepository.save(UserFixture.newUser(email));
+
+        doThrow(new MailSendException("smtp unavailable"))
+            .when(mailSender).send(any(SimpleMailMessage.class));
+
+        AuthController.RequestCodeRequest body =
+            new AuthController.RequestCodeRequest(email);
+        mockMvc.perform(post("/api/auth/request-code")
+                .with(request -> {
+                    request.setRemoteAddr("signin-smtp-" + suffix);
+                    return request;
+                })
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(MockMvcTestHelper.json(objectMapper, body)))
+            .andExpect(status().isOk())
+            .andExpect(content().string(""));
+
+        assertThat(authTokenRepository
+            .findFirstByEmailAndUsedAtIsNullOrderByCreatedAtDesc(email)).isEmpty();
     }
 }
