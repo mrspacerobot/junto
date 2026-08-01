@@ -65,6 +65,35 @@ application previously accepted a credential-bearing Render `DATABASE_URL` and
 parsed it in Java; that adapter is intentionally removed. `DATABASE_URL` is no
 longer read by the production profile.
 
+## Production container
+
+Build the same pinned, multi-stage artifact used by CI from the repository root:
+
+```bash
+docker build --pull --tag junto:local .
+./scripts/verify-image.sh junto:local
+```
+
+The image serves the compiled Vue application and Spring Boot API together on
+port 8080 and activates the `prod` profile by default. It needs an external
+PostgreSQL/PostGIS database, the public application URL, and a Resend API key.
+For a local production-profile run using the Compose database:
+
+```bash
+docker compose up -d --wait postgres
+: "${RESEND_API_KEY:?set RESEND_API_KEY first}"
+docker run --detach --name junto --publish 8080:8080 \
+  --add-host host.docker.internal:host-gateway \
+  --env DATABASE_URL='jdbc:postgresql://host.docker.internal:5432/junto?user=junto&password=junto' \
+  --env APP_BASE_URL='http://localhost:8080' \
+  --env RESEND_API_KEY \
+  junto:local
+```
+
+Open <http://localhost:8080>. Stop with `docker stop junto`; Docker sends
+`SIGTERM` directly to Java so Spring can finish its graceful shutdown, then
+remove the stopped container with `docker rm junto`.
+
 ## Verification
 
 ```bash
