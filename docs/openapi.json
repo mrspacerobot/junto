@@ -1638,7 +1638,9 @@
         "required": [
           "joinPolicy",
           "maxParticipants",
-          "startsAt"
+          "startsAt",
+          "title",
+          "typeSlug"
         ]
       },
       "ParticipantResponse": {

@@ -195,6 +195,10 @@ public class ActivityService {
             throw new ConflictException("Activity is not cancelled");
         }
 
+        if (activity.getStartsAt().isBefore(OffsetDateTime.now())) {
+            throw new ConflictException("Cannot reactivate an activity whose start time has passed");
+        }
+
         activity.setStatus(ActivityStatus.ACTIVE);
         activityRepository.save(activity);
     }
@@ -216,10 +220,10 @@ public class ActivityService {
         }
 
         if (searchLat != null) {
-            if (searchLat < -90 || searchLat > 90) {
+            if (!Double.isFinite(searchLat) || searchLat < -90 || searchLat > 90) {
                 throw new ApiException("VALIDATION_ERROR", "lat must be between -90 and 90", 400);
             }
-            if (searchLng < -180 || searchLng > 180) {
+            if (!Double.isFinite(searchLng) || searchLng < -180 || searchLng > 180) {
                 throw new ApiException("VALIDATION_ERROR", "lng must be between -180 and 180", 400);
             }
         }
@@ -417,7 +421,7 @@ public class ActivityService {
             throw new ApiException("VALIDATION_ERROR",
                 "locationLat and locationLng must both be provided or both absent", 400);
         }
-        if (lat != null && (lat < -90 || lat > 90 || lng < -180 || lng > 180)) {
+        if (lat != null && (!Double.isFinite(lat) || !Double.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180)) {
             throw new ApiException("VALIDATION_ERROR", "Invalid coordinates", 400);
         }
     }

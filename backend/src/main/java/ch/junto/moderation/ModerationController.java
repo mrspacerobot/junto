@@ -9,6 +9,7 @@ import ch.junto.report.enums.ReportStatus;
 import ch.junto.user.enums.UserRole;
 import ch.junto.core.exception.ForbiddenException;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -42,7 +43,7 @@ public class ModerationController {
         moderationService.resolveReport(reportId, status);
     }
 
-    public record TakeActionRequest(UUID targetUserId, ModerationActionType actionType, String reason) {}
+    public record TakeActionRequest(@NotNull UUID targetUserId, @NotNull ModerationActionType actionType, String reason) {}
 
     @PostMapping("/action")
     public ModerationAction takeAction(@RequestBody @Valid TakeActionRequest request, @CurrentUser User user) {
