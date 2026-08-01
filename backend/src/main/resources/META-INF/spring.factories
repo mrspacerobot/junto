@@ -1,0 +1,2 @@
+org.springframework.boot.EnvironmentPostProcessor=\
+ch.junto.core.config.RenderDatabaseEnvironmentPostProcessor

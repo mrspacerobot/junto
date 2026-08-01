@@ -21,6 +21,24 @@ The app is at <http://localhost:5173> and Mailpit is at
 <http://localhost:8025>. The `dev` profile provides a development-only login
 endpoint and seed data; it is not active in production.
 
+## Production database URL
+
+The `prod` profile requires `DATABASE_URL` in Render's standard form:
+
+```text
+postgresql://user:password@host:port/database?optional=parameters
+```
+
+The host may be a DNS name, IPv4 address, or bracketed IPv6 address. An explicit
+port, one database path segment, and non-empty authority credentials are
+required. Percent-encode reserved or Unicode credential characters as UTF-8;
+the adapter decodes credentials, preserves the encoded database path, and
+passes named query parameters to the PostgreSQL driver separately so their
+values are absent from the JDBC URL reported by Flyway and Hibernate. Malformed
+values, unsupported schemes, credential-overriding query parameters, and URL
+fragments stop startup with a generic diagnostic that does not echo the URL,
+credentials, or query values.
+
 ## Verification
 
 ```bash
