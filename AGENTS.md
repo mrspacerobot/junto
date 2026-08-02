@@ -4,8 +4,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - Backend verification is `cd backend && ./gradlew build`; the suite uses disposable
   PostGIS containers and therefore requires Docker.
-- The production database URL contract and failure behavior are documented in
-  `README.md`; conversion is owned by `backend/src/main/java/ch/junto/core/config/RenderPostgresqlUrl.java`.
+- The provider-neutral production datasource environment contract and Render
+  Blueprint mappings are documented in `README.md`; the declarative JDBC
+  composition is authoritative in `backend/src/main/resources/application-prod.yml`.
 
 ## Maintaining this file
 
