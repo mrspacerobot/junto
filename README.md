@@ -84,7 +84,11 @@ docker compose up -d --wait postgres
 : "${RESEND_API_KEY:?set RESEND_API_KEY first}"
 docker run --detach --name junto --publish 8080:8080 \
   --add-host host.docker.internal:host-gateway \
-  --env DATABASE_URL='jdbc:postgresql://host.docker.internal:5432/junto?user=junto&password=junto' \
+  --env DATABASE_HOST=host.docker.internal \
+  --env DATABASE_PORT=5432 \
+  --env DATABASE_NAME=junto \
+  --env DATABASE_USERNAME=junto \
+  --env DATABASE_PASSWORD=junto \
   --env APP_BASE_URL='http://localhost:8080' \
   --env RESEND_API_KEY \
   junto:local
