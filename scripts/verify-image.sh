@@ -90,7 +90,11 @@ docker exec "$database" pg_isready -h 127.0.0.1 -U junto -d junto >/dev/null 2>&
   fail "disposable PostGIS did not become ready"
 
 docker run -d --name "$application" --network "$network" \
-  -e 'DATABASE_URL=jdbc:postgresql://junto-image-verify-db-'"${suffix}"':5432/junto?user=junto&password=verification' \
+  -e DATABASE_HOST="junto-image-verify-db-${suffix}" \
+  -e DATABASE_PORT=5432 \
+  -e DATABASE_NAME=junto \
+  -e DATABASE_USERNAME=junto \
+  -e DATABASE_PASSWORD=verification \
   -e APP_BASE_URL=http://localhost:8080 \
   -e RESEND_API_KEY=image-verification-only \
   "$image" >/dev/null
