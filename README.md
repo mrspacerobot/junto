@@ -85,6 +85,33 @@ OPENAPI_DATABASE_USER=junto OPENAPI_DATABASE_PASSWORD=junto \
 cd ../frontend && npm run generate-api
 ```
 
+## Production SPA packaging and routing
+
+`./gradlew bootJar` installs and builds the Vue frontend, then packages its `dist`
+contents under Spring Boot's `static/` classpath. A build stage that already produced
+the frontend can avoid requiring Node in the Java stage by supplying its location:
+
+```bash
+cd backend
+./gradlew bootJar -PfrontendDistDir=/absolute/path/to/frontend/dist
+```
+
+Production request behavior changes from a backend-only authenticated catch-all to
+same-origin routing with explicit boundaries:
+
+- Before, anonymous requests for `/`, `/auth/login`, frontend assets, and direct
+  deep links received `401`; after packaging they receive the public SPA shell or
+  asset. Vue still performs its client-side authentication redirects.
+- Before, Spring had no history fallback; after packaging, only routes declared in
+  `SpaController` serve uncached `index.html`.
+- `/api/**` remains behind Spring Security except for the explicit login endpoints.
+  Unknown APIs return `401` anonymously or a JSON `404` when authenticated; they
+  never return SPA HTML.
+- `/ws` remains the STOMP WebSocket handshake endpoint and is excluded from SPA
+  fallback.
+- Vite's hashed `/assets/**` responses are public and immutable for one year.
+  `index.html`, the favicon, and authentication responses are not stored.
+
 ## Onda migration
 
 Do not reuse, delete, or reinitialize an existing Onda Docker volume. Follow the
