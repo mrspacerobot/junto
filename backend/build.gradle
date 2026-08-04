@@ -53,6 +53,57 @@ dependencies {
     testFixturesImplementation 'org.hibernate.orm:hibernate-spatial'
 }
 
+def frontendDirectory = file('../frontend')
+def suppliedFrontendDist = providers.gradleProperty('frontendDistDir')
+def frontendDist = suppliedFrontendDist.map { file(it) }.orElse(file('../frontend/dist'))
+def generatedFrontendResources = layout.buildDirectory.dir('generated/frontend/static')
+def npmCommand = System.getProperty('os.name').toLowerCase().contains('windows') ? 'npm.cmd' : 'npm'
+
+tasks.register('frontendInstall', Exec) {
+    description = 'Installs the pinned frontend dependencies.'
+    group = 'build'
+    workingDir frontendDirectory
+    commandLine npmCommand, 'ci'
+    inputs.files(file('../frontend/package.json'), file('../frontend/package-lock.json'), file('../frontend/openapi-ts.config.ts'), file('../docs/openapi.json'))
+    outputs.files(file('../frontend/node_modules/.package-lock.json'), file('../frontend/src/api/generated/sdk.gen.ts'))
+    onlyIf { !suppliedFrontendDist.isPresent() }
+}
+
+tasks.register('frontendBuild', Exec) {
+    description = 'Builds the Vue application for inclusion in the Spring Boot artifact.'
+    group = 'build'
+    dependsOn tasks.named('frontendInstall')
+    workingDir frontendDirectory
+    commandLine npmCommand, 'run', 'build'
+    inputs.files(fileTree(frontendDirectory) {
+        exclude 'dist/**', 'node_modules/**', 'e2e/**', 'playwright-report/**', 'test-results/**'
+    })
+    outputs.dir(file('../frontend/dist'))
+    onlyIf { !suppliedFrontendDist.isPresent() }
+}
+
+tasks.register('syncFrontend', Sync) {
+    description = 'Stages a built Vue application as Spring Boot static resources.'
+    group = 'build'
+    if (!suppliedFrontendDist.isPresent()) {
+        dependsOn tasks.named('frontendBuild')
+    }
+    from(frontendDist)
+    into(generatedFrontendResources)
+    doFirst {
+        if (!new File(frontendDist.get(), 'index.html').isFile()) {
+            throw new GradleException("Frontend distribution at ${frontendDist.get()} has no index.html")
+        }
+    }
+}
+
+tasks.named('processResources') {
+    dependsOn tasks.named('syncFrontend')
+    from(generatedFrontendResources) {
+        into 'static'
+    }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
 }
