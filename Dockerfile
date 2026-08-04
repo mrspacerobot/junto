@@ -33,7 +33,7 @@ COPY backend/src/main/java/ ./src/main/java/
 COPY backend/src/main/resources/ ./src/main/resources/
 COPY --from=frontend-build /workspace/frontend/dist/ ./src/main/resources/static/
 RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew bootJar --no-daemon && \
+    ./gradlew bootJar --no-daemon -PskipFrontend && \
     artifact="$(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-plain.jar' ! -name '*-test-fixtures.jar' -print -quit)" && \
     test -n "$artifact" && \
     jar tf "$artifact" | grep -q '^BOOT-INF/classes/static/index.html$' && \
