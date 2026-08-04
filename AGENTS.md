@@ -4,6 +4,11 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - Authentication intent is explicit: `/api/auth/request-code` is enumeration-safe sign-in, while `/api/auth/signup/request-code` validates the invite independently of account existence. Preserve this split; see `AuthService` and `AuthIntegrationTest`.
 - Auth-code replacement intentionally uses a PostgreSQL transaction advisory lock behind `AuthTokenIssuanceLock`, plus the partial unique index as the final invariant; see `PostgresAuthTokenIssuanceLock` and `AuthConcurrencyIntegrationTest`.
+- Backend verification is `cd backend && ./gradlew build`; the suite uses disposable
+  PostGIS containers and therefore requires Docker.
+- The provider-neutral production datasource environment contract and Render
+  Blueprint mappings are documented in `README.md`; the declarative JDBC
+  composition is authoritative in `backend/src/main/resources/application-prod.yml`.
 
 ## Maintaining this file
 
