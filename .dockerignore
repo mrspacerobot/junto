@@ -6,9 +6,11 @@
 !Dockerfile
 
 !docs/
+docs/**
 !docs/openapi.json
 
 !frontend/
+frontend/**
 !frontend/package.json
 !frontend/package-lock.json
 !frontend/openapi-ts.config.ts
@@ -27,12 +29,14 @@ frontend/src/**/*.spec.*
 frontend/src/**/*.test.*
 
 !backend/
+backend/**
 !backend/build.gradle
 !backend/settings.gradle
 !backend/gradlew
 !backend/gradle/
 !backend/gradle/**
 !backend/src/
+backend/src/**
 !backend/src/main/
 !backend/src/main/**
 
@@ -42,3 +46,8 @@ backend/src/main/resources/application-dev.yml
 backend/src/main/resources/application-openapi.yml
 backend/src/main/resources/application-test.yml
 backend/src/main/resources/db/migration-dev/
+
+# Local dotenv credentials stay excluded even if created inside an allowed
+# production source directory.
+**/.env
+**/.env.*
