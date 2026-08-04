@@ -130,7 +130,7 @@ tasks.named('bootJar') {
 // stage; skip the Spring Boot auto-frontend tasks that require npm on PATH.
 if (project.hasProperty('skipFrontend')) {
     tasks.configureEach {
-        if (name.startsWith('frontend')) {
+        if (name.startsWith('frontend') || name == 'syncFrontend') {
             enabled = false
         }
     }

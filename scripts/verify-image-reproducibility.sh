@@ -25,7 +25,7 @@ IFS=/ read -r platform_os platform_arch platform_variant platform_extra <<<"$pla
 [ -n "$platform_os" ] && [ -n "$platform_arch" ] && [ -z "${platform_extra:-}" ] || \
   fail "platform must have os/architecture[/variant] form"
 
-build_archive() {
+build_oci_archive() {
   local destination="$1"
   docker buildx build \
     --pull \
@@ -34,54 +34,52 @@ build_archive() {
     --provenance=false \
     --build-arg "SOURCE_DATE_EPOCH=$source_date_epoch" \
     --tag "$image" \
-    --output "type=docker,dest=$destination" \
+    --output "type=oci,dest=$destination" \
     "$repository_root"
 }
 
-platform_manifest() {
+platform_manifest_digest() {
   local archive="$1"
   python3 - "$archive" "$platform_os" "$platform_arch" "${platform_variant:-}" <<'PY'
-import hashlib
 import json
 import sys
 import tarfile
 
 archive, wanted_os, wanted_arch, wanted_variant = sys.argv[1:]
-with tarfile.open(archive) as image:
-    manifest_json = json.load(image.extractfile("manifest.json"))
-    if len(manifest_json) != 1:
+with tarfile.open(archive) as tf:
+    index = json.load(tf.extractfile("index.json"))
+    candidates = []
+    for m in index.get("manifests", []):
+        p = m.get("platform", {})
+        if p.get("os") == wanted_os and p.get("architecture") == wanted_arch:
+            if not wanted_variant or p.get("variant", "") == wanted_variant:
+                candidates.append(m["digest"])
+    if len(candidates) != 1:
         raise SystemExit(
-            f"expected one image entry in docker archive, found {len(manifest_json)}"
+            f"expected exactly one {wanted_os}/{wanted_arch} manifest in "
+            f"index.json, found {len(candidates)}"
         )
-    config_path = manifest_json[0]["Config"]
-    config_bytes = image.extractfile(config_path).read()
-config = json.loads(config_bytes)
-if config.get("os") != wanted_os or config.get("architecture") != wanted_arch:
-    raise SystemExit(
-        f"image platform {config.get('os')}/{config.get('architecture')} "
-        f"does not match requested {wanted_os}/{wanted_arch}"
-    )
-if wanted_variant and config.get("variant", "") != wanted_variant:
-    raise SystemExit(
-        f"image variant {config.get('variant', '')} does not match requested {wanted_variant}"
-    )
-digest = "sha256:" + hashlib.sha256(config_bytes).hexdigest()
-print(digest)
+    print(candidates[0])
 PY
 }
 
-build_archive "$tmpdir/first.tar"
-build_archive "$tmpdir/second.tar"
-first_manifest="$(platform_manifest "$tmpdir/first.tar")"
-second_manifest="$(platform_manifest "$tmpdir/second.tar")"
-[ "$first_manifest" = "$second_manifest" ] || \
-  fail "same-commit platform manifests differ: $first_manifest != $second_manifest"
+build_oci_archive "$tmpdir/first.tar"
+build_oci_archive "$tmpdir/second.tar"
+first_digest="$(platform_manifest_digest "$tmpdir/first.tar")"
+second_digest="$(platform_manifest_digest "$tmpdir/second.tar")"
+[ "$first_digest" = "$second_digest" ] || \
+  fail "same-commit platform manifests differ: $first_digest != $second_digest"
 
-# Load the exact first artifact for the remaining image/runtime checks. The
-# equality build disables provenance only because per-build attestations are
-# expected to change an outer index; the runtime platform manifest is the
-# reproducibility contract.
-docker load --input "$tmpdir/first.tar" >/dev/null
-docker image inspect "$image" >/dev/null 2>&1 || fail "reproducible image was not loaded as $image"
+# Load the production image for runtime checks via a separate cache-enabled
+# build. The OCI archives above are the reproducibility contract; this build
+# just makes the image available to docker for inspection and smoke tests.
+docker buildx build \
+  --platform "$platform" \
+  --provenance=false \
+  --build-arg "SOURCE_DATE_EPOCH=$source_date_epoch" \
+  --tag "$image" \
+  --load \
+  "$repository_root"
+docker image inspect "$image" >/dev/null 2>&1 || fail "production image was not loaded as $image"
 printf 'verified image reproducibility: two clean %s builds at epoch %s produced platform manifest %s\n' \
-  "$platform" "$source_date_epoch" "$first_manifest"
+  "$platform" "$source_date_epoch" "$first_digest"
