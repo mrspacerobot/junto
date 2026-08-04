@@ -14,5 +14,4 @@ public record MessageThreadResponse(
     List<String> participantAvatars,
     String lastMessageContent,
     String lastMessageSender,
-    OffsetDateTime lastMessageAt
-) {}
+    OffsetDateTime lastMessageAt) {}

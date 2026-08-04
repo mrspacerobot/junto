@@ -1,8 +1,8 @@
 package ch.junto.activity.dto;
 
+import ch.junto.activity.entity.CustomFields;
 import ch.junto.activity.enums.ActivityStatus;
 import ch.junto.activity.enums.JoinPolicy;
-import ch.junto.activity.entity.CustomFields;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -27,5 +27,4 @@ public record ActivityDetailResponse(
     String creatorDisplayName,
     String creatorAvatarUrl,
     boolean isJoinable,
-    OffsetDateTime effectiveDeadline
-) {}
+    OffsetDateTime effectiveDeadline) {}

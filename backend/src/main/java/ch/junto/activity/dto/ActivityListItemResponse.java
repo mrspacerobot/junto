@@ -1,7 +1,7 @@
 package ch.junto.activity.dto;
 
-import ch.junto.activity.enums.ActivityStatus;
 import ch.junto.activity.entity.CustomFields;
+import ch.junto.activity.enums.ActivityStatus;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -25,5 +25,4 @@ public record ActivityListItemResponse(
     String imageUrl,
     List<String> participantAvatars,
     List<ActivitySummaryField> summary,
-    Double distance
-) {}
+    Double distance) {}

@@ -1,9 +1,7 @@
 <template>
   <div class="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
     <div class="sm:mx-auto sm:w-full sm:max-w-md text-center">
-      <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight">
-        One last thing
-      </h2>
+      <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight">One last thing</h2>
       <p class="mt-2 text-sm text-slate-600">
         How should we call you? This will be your public name on Junto.
       </p>
@@ -13,7 +11,9 @@
       <div class="bg-white py-8 px-4 shadow-sm border border-slate-200 sm:rounded-2xl sm:px-10">
         <form @submit.prevent="handleOnboard" class="space-y-6">
           <div>
-            <label for="displayName" class="block text-sm font-semibold text-slate-700">Display Name</label>
+            <label for="displayName" class="block text-sm font-semibold text-slate-700"
+              >Display Name</label
+            >
             <div class="mt-1">
               <input
                 id="displayName"
@@ -39,7 +39,10 @@
           </div>
         </form>
 
-        <div v-if="error" class="mt-4 p-3 bg-rose-50 text-rose-700 text-xs font-bold rounded-lg text-center border border-rose-100">
+        <div
+          v-if="error"
+          class="mt-4 p-3 bg-rose-50 text-rose-700 text-xs font-bold rounded-lg text-center border border-rose-100"
+        >
           {{ error }}
         </div>
       </div>
@@ -66,7 +69,7 @@ const handleOnboard = async () => {
   error.value = '';
   try {
     const { error: err } = await userOnboard({
-      body: { displayName: displayName.value }
+      body: { displayName: displayName.value },
     });
     if (err) {
       error.value = apiErrorMessage(err, 'Failed to save');

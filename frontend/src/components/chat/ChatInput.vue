@@ -19,15 +19,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Send } from 'lucide-vue-next'
+import { ref } from 'vue';
+import { Send } from 'lucide-vue-next';
 
-const emit = defineEmits(['send'])
-const text = ref('')
+const emit = defineEmits(['send']);
+const text = ref('');
 
 const handleSend = () => {
-  if (!text.value.trim()) return
-  emit('send', text.value)
-  text.value = ''
-}
+  if (!text.value.trim()) return;
+  emit('send', text.value);
+  text.value = '';
+};
 </script>

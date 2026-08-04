@@ -6,14 +6,16 @@ import org.hibernate.type.StandardBasicTypes;
 
 public class SpatialFunctionContributor implements FunctionContributor {
 
-    @Override
-    public void contributeFunctions(FunctionContributions functionContributions) {
-        functionContributions.getFunctionRegistry().registerPattern(
+  @Override
+  public void contributeFunctions(FunctionContributions functionContributions) {
+    functionContributions
+        .getFunctionRegistry()
+        .registerPattern(
             "st_dwithin",
             "ST_DWithin(?1, ?2::geography, ?3)",
-            functionContributions.getTypeConfiguration()
+            functionContributions
+                .getTypeConfiguration()
                 .getBasicTypeRegistry()
-                .resolve(StandardBasicTypes.BOOLEAN)
-        );
-    }
+                .resolve(StandardBasicTypes.BOOLEAN));
+  }
 }

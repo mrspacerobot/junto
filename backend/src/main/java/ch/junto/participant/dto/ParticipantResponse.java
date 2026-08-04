@@ -10,5 +10,4 @@ public record ParticipantResponse(
     String displayName,
     String avatarUrl,
     ParticipantRole role,
-    ParticipantStatus status
-) {}
+    ParticipantStatus status) {}

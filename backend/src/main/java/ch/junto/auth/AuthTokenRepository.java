@@ -1,31 +1,32 @@
 package ch.junto.auth;
 
 import ch.junto.auth.entity.AuthToken;
+import java.time.OffsetDateTime;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.OffsetDateTime;
-import java.util.Optional;
-import java.util.UUID;
-
 public interface AuthTokenRepository extends JpaRepository<AuthToken, UUID> {
 
-    // --- Atomic consume operations ---
+  // --- Atomic consume operations ---
 
-    @Modifying
-    @Query("""
+  @Modifying
+  @Query(
+      """
         UPDATE AuthToken t
         SET t.usedAt = :now
         WHERE t.token = :token
           AND t.usedAt IS NULL
           AND t.expiresAt >= :now
         """)
-    int consumeByToken(@Param("token") UUID token, @Param("now") OffsetDateTime now);
+  int consumeByToken(@Param("token") UUID token, @Param("now") OffsetDateTime now);
 
-    @Modifying
-    @Query("""
+  @Modifying
+  @Query(
+      """
         UPDATE AuthToken t
         SET t.usedAt = :now
         WHERE t.email = :email
@@ -34,17 +35,17 @@ public interface AuthTokenRepository extends JpaRepository<AuthToken, UUID> {
           AND t.expiresAt >= :now
           AND t.attemptCount < :maxAttempts
         """)
-    int consumeByEmailAndCode(
-        @Param("email") String email,
-        @Param("code") String code,
-        @Param("now") OffsetDateTime now,
-        @Param("maxAttempts") int maxAttempts
-    );
+  int consumeByEmailAndCode(
+      @Param("email") String email,
+      @Param("code") String code,
+      @Param("now") OffsetDateTime now,
+      @Param("maxAttempts") int maxAttempts);
 
-    // --- Attempt tracking ---
+  // --- Attempt tracking ---
 
-    @Modifying
-    @Query("""
+  @Modifying
+  @Query(
+      """
         UPDATE AuthToken t
         SET t.attemptCount = t.attemptCount + 1
         WHERE t.email = :email
@@ -53,30 +54,31 @@ public interface AuthTokenRepository extends JpaRepository<AuthToken, UUID> {
           AND t.expiresAt >= :now
           AND t.attemptCount < :maxAttempts
         """)
-    int incrementWrongAttempt(
-        @Param("email") String email,
-        @Param("submittedCode") String submittedCode,
-        @Param("now") OffsetDateTime now,
-        @Param("maxAttempts") int maxAttempts
-    );
+  int incrementWrongAttempt(
+      @Param("email") String email,
+      @Param("submittedCode") String submittedCode,
+      @Param("now") OffsetDateTime now,
+      @Param("maxAttempts") int maxAttempts);
 
-    // --- Lookup (with usedAt filter) ---
+  // --- Lookup (with usedAt filter) ---
 
-    Optional<AuthToken> findFirstByEmailAndUsedAtIsNullOrderByCreatedAtDesc(String email);
-    Optional<AuthToken> findByTokenAndUsedAtIsNull(UUID token);
+  Optional<AuthToken> findFirstByEmailAndUsedAtIsNullOrderByCreatedAtDesc(String email);
 
-    // --- Lookup (without usedAt filter — for post-consume metadata) ---
+  Optional<AuthToken> findByTokenAndUsedAtIsNull(UUID token);
 
-    Optional<AuthToken> findByToken(UUID token);
-    Optional<AuthToken> findByEmailAndCode(String email, String code);
+  // --- Lookup (without usedAt filter — for post-consume metadata) ---
 
-    // --- Cleanup ---
+  Optional<AuthToken> findByToken(UUID token);
 
-    @Modifying
-    @Query("DELETE FROM AuthToken t WHERE t.email = :email AND t.usedAt IS NULL")
-    void deleteUnusedByEmail(@Param("email") String email);
+  Optional<AuthToken> findByEmailAndCode(String email, String code);
 
-    @Modifying
-    @Query("DELETE FROM AuthToken t WHERE t.expiresAt < :cutoff")
-    int deleteExpiredBefore(@Param("cutoff") OffsetDateTime cutoff);
+  // --- Cleanup ---
+
+  @Modifying
+  @Query("DELETE FROM AuthToken t WHERE t.email = :email AND t.usedAt IS NULL")
+  void deleteUnusedByEmail(@Param("email") String email);
+
+  @Modifying
+  @Query("DELETE FROM AuthToken t WHERE t.expiresAt < :cutoff")
+  int deleteExpiredBefore(@Param("cutoff") OffsetDateTime cutoff);
 }

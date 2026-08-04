@@ -1,5 +1,7 @@
 <template>
-  <header class="h-[52px] border-b border-warm-300 flex items-center gap-0 px-7 flex-shrink-0 bg-white">
+  <header
+    class="h-[52px] border-b border-warm-300 flex items-center gap-0 px-7 flex-shrink-0 bg-white"
+  >
     <!-- Tabs -->
     <div class="flex gap-1 flex-1">
       <router-link
@@ -7,14 +9,19 @@
         :key="tab.id"
         :to="tab.to"
         class="px-4 h-[52px] flex items-center text-sm font-medium transition-colors border-b-2"
-        :class="isActive(tab.id)
-          ? 'border-primary-700 text-primary-700 font-semibold'
-          : 'border-transparent text-[#6A6560] hover:text-slate-900'"
-      >{{ tab.label }}</router-link>
+        :class="
+          isActive(tab.id)
+            ? 'border-primary-700 text-primary-700 font-semibold'
+            : 'border-transparent text-[#6A6560] hover:text-slate-900'
+        "
+        >{{ tab.label }}</router-link
+      >
     </div>
 
     <!-- Search -->
-    <div class="flex items-center gap-2 bg-warm-100 border border-warm-300 rounded-full px-3.5 py-1.5 w-[220px]">
+    <div
+      class="flex items-center gap-2 bg-warm-100 border border-warm-300 rounded-full px-3.5 py-1.5 w-[220px]"
+    >
       <Search class="w-3.5 h-3.5 text-[#9D998F] flex-shrink-0" />
       <input
         v-model="search"
@@ -39,33 +46,38 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useRoute } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { Search, Bell, ChevronDown } from 'lucide-vue-next'
+import { ref, computed } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useRoute } from 'vue-router';
+import { useAuthStore } from '@/stores/auth';
+import { Search, Bell, ChevronDown } from 'lucide-vue-next';
 
-const $route = useRoute()
-const { user } = storeToRefs(useAuthStore())
-const search = ref('')
+const $route = useRoute();
+const { user } = storeToRefs(useAuthStore());
+const search = ref('');
 
 const tabs = [
   { id: 'feed', label: 'Feed', to: '/activities' },
   { id: 'explore', label: 'Explore', to: '/explore' },
   { id: 'messages', label: 'Messages', to: '/messages' },
-]
+];
 
 const isActive = (id: string) => {
-  const path = $route.path
-  if (id === 'feed') return path.startsWith('/activities')
-  if (id === 'explore') return path === '/explore'
-  if (id === 'messages') return path.startsWith('/messages')
-  return false
-}
+  const path = $route.path;
+  if (id === 'feed') return path.startsWith('/activities');
+  if (id === 'explore') return path === '/explore';
+  if (id === 'messages') return path.startsWith('/messages');
+  return false;
+};
 
 const initials = computed(() => {
-  const name = user.value?.displayName
-  if (!name) return '?'
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-})
+  const name = user.value?.displayName;
+  if (!name) return '?';
+  return name
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+});
 </script>

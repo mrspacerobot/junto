@@ -10,15 +10,16 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 /**
- * Serves the uncached SPA shell only for routes owned by the Vue router.
- * API, WebSocket, and unknown resource paths are deliberately not catch-all routes.
+ * Serves the uncached SPA shell only for routes owned by the Vue router. API, WebSocket, and
+ * unknown resource paths are deliberately not catch-all routes.
  */
 @Controller
 public class SpaController {
 
-    private final Resource index = new ClassPathResource("static/index.html");
+  private final Resource index = new ClassPathResource("static/index.html");
 
-    @GetMapping(value = {
+  @GetMapping(
+      value = {
         "/",
         "/auth/login",
         "/auth/verify",
@@ -30,12 +31,13 @@ public class SpaController {
         "/messages",
         "/messages/{activityId}",
         "/profile"
-    }, produces = MediaType.TEXT_HTML_VALUE)
-    @ResponseBody
-    public ResponseEntity<Resource> index() {
-        return ResponseEntity.ok()
-            .contentType(MediaType.TEXT_HTML)
-            .cacheControl(CacheControl.noStore())
-            .body(index);
-    }
+      },
+      produces = MediaType.TEXT_HTML_VALUE)
+  @ResponseBody
+  public ResponseEntity<Resource> index() {
+    return ResponseEntity.ok()
+        .contentType(MediaType.TEXT_HTML)
+        .cacheControl(CacheControl.noStore())
+        .body(index);
+  }
 }

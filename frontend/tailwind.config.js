@@ -1,9 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{vue,js,ts,jsx,tsx}",
-  ],
+  content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
@@ -38,10 +35,10 @@ export default {
         sans: ['DM Sans', 'sans-serif'],
       },
       boxShadow: {
-        'card': '0 1px 4px rgba(0,0,0,0.04)',
+        card: '0 1px 4px rgba(0,0,0,0.04)',
         'card-hover': '0 4px 20px rgba(0,0,0,0.08)',
       },
     },
   },
   plugins: [],
-}
+};

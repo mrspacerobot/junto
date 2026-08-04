@@ -9,18 +9,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class AuthTokenCleanupJob {
 
-    private static final Logger log = LoggerFactory.getLogger(AuthTokenCleanupJob.class);
-    private final AuthService authService;
+  private static final Logger log = LoggerFactory.getLogger(AuthTokenCleanupJob.class);
+  private final AuthService authService;
 
-    public AuthTokenCleanupJob(AuthService authService) {
-        this.authService = authService;
-    }
+  public AuthTokenCleanupJob(AuthService authService) {
+    this.authService = authService;
+  }
 
-    @Scheduled(cron = "0 0 * * * *") // Hourly
-    public void cleanup() {
-        int deleted = authService.cleanExpiredTokens();
-        if (deleted > 0) {
-            log.info("Cleaned up {} expired auth tokens", deleted);
-        }
+  @Scheduled(cron = "0 0 * * * *") // Hourly
+  public void cleanup() {
+    int deleted = authService.cleanExpiredTokens();
+    if (deleted > 0) {
+      log.info("Cleaned up {} expired auth tokens", deleted);
     }
+  }
 }

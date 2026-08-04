@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-primary-50: #f4f8e8;
@@ -13,15 +13,15 @@
   --color-primary-900: #2a3b0b;
   --color-primary-950: #1a2606;
 
-  --color-warm-50: #FAF8F4;
-  --color-warm-100: #F7F4EF;
-  --color-warm-200: #EFECE6;
-  --color-warm-300: #E4E1DA;
-  --color-warm-400: #D0CDC6;
+  --color-warm-50: #faf8f4;
+  --color-warm-100: #f7f4ef;
+  --color-warm-200: #efece6;
+  --color-warm-300: #e4e1da;
+  --color-warm-400: #d0cdc6;
 
-  --color-accent: #4A7230;
-  --color-accent-bg: #EDF1E6;
-  --color-accent-hover: #3D6128;
+  --color-accent: #4a7230;
+  --color-accent-bg: #edf1e6;
+  --color-accent-hover: #3d6128;
 
   --font-display: 'Playfair Display', serif;
   --font-sans: 'DM Sans', sans-serif;

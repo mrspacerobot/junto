@@ -1,7 +1,7 @@
 package ch.junto.activity.dto;
 
-import ch.junto.activity.enums.JoinPolicy;
 import ch.junto.activity.entity.CustomFields;
+import ch.junto.activity.enums.JoinPolicy;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -21,5 +21,4 @@ public record ActivityCreateRequest(
     OffsetDateTime signupDeadline,
     @NotNull @Min(1) Integer maxParticipants,
     @NotNull JoinPolicy joinPolicy,
-    CustomFields customFields
-) {}
+    CustomFields customFields) {}

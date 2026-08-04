@@ -9,5 +9,4 @@ public record ActivityTypeResponse(
     String iconName,
     String defaultImageUrl,
     List<CustomFieldDefinition> customFields,
-    List<String> summaryFields
-) {}
+    List<String> summaryFields) {}

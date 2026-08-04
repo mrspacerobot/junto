@@ -14,7 +14,9 @@
       <div class="bg-white py-8 px-4 shadow-card border border-warm-200 sm:rounded-2xl sm:px-10">
         <form v-if="step === 'EMAIL'" @submit.prevent="handleRequestCode" class="space-y-6">
           <div>
-            <label for="email" class="block text-sm font-semibold text-slate-700">Email address</label>
+            <label for="email" class="block text-sm font-semibold text-slate-700"
+              >Email address</label
+            >
             <div class="mt-1">
               <input
                 id="email"
@@ -28,7 +30,9 @@
           </div>
 
           <div>
-            <label for="inviteCode" class="block text-sm font-semibold text-slate-700">Invite Code (New users only)</label>
+            <label for="inviteCode" class="block text-sm font-semibold text-slate-700"
+              >Invite Code (New users only)</label
+            >
             <div class="mt-1">
               <input
                 id="inviteCode"
@@ -53,7 +57,9 @@
 
         <form v-else @submit.prevent="handleVerify" class="space-y-6">
           <div>
-            <label for="code" class="block text-sm font-semibold text-slate-700 text-center mb-4">Verification Code</label>
+            <label for="code" class="block text-sm font-semibold text-slate-700 text-center mb-4"
+              >Verification Code</label
+            >
             <div class="mt-1">
               <input
                 id="code"
@@ -85,7 +91,10 @@
           </div>
         </form>
 
-        <div v-if="error" class="mt-4 p-3 bg-rose-50 text-rose-700 text-xs font-bold rounded-lg text-center border border-rose-100">
+        <div
+          v-if="error"
+          class="mt-4 p-3 bg-rose-50 text-rose-700 text-xs font-bold rounded-lg text-center border border-rose-100"
+        >
           {{ error }}
         </div>
       </div>
@@ -127,7 +136,7 @@ const handleRequestCode = async () => {
   error.value = '';
   try {
     const { error: err } = await authRequestCode({
-      body: { email: email.value, inviteCode: inviteCode.value }
+      body: { email: email.value, inviteCode: inviteCode.value },
     });
     if (err) {
       error.value = apiErrorMessage(err, 'Failed to request code');
@@ -146,7 +155,7 @@ const handleVerify = async () => {
   error.value = '';
   try {
     const { error: err } = await authVerify({
-      body: { email: email.value, code: code.value }
+      body: { email: email.value, code: code.value },
     });
     if (err) {
       error.value = apiErrorMessage(err, 'Invalid code');

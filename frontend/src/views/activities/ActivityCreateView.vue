@@ -19,33 +19,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import PageContainer from '@/components/layout/PageContainer.vue'
-import ActivityForm from '@/components/activity/ActivityForm.vue'
-import { activityCreate } from '@/api/generated'
-import { toActivityCreateRequest, type ActivityFormValues } from '@/api/transforms'
-import { useActivityTypes } from '@/composables/useActivityTypes'
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import PageContainer from '@/components/layout/PageContainer.vue';
+import ActivityForm from '@/components/activity/ActivityForm.vue';
+import { activityCreate } from '@/api/generated';
+import { toActivityCreateRequest, type ActivityFormValues } from '@/api/transforms';
+import { useActivityTypes } from '@/composables/useActivityTypes';
 
-const router = useRouter()
-const creating = ref(false)
-const error = ref<string | null>(null)
-const { activityTypes, loading: typesLoading } = useActivityTypes()
+const router = useRouter();
+const creating = ref(false);
+const error = ref<string | null>(null);
+const { activityTypes, loading: typesLoading } = useActivityTypes();
 
 const handleCreate = async (form: ActivityFormValues) => {
-  creating.value = true
-  error.value = null
+  creating.value = true;
+  error.value = null;
   try {
-    const response = await activityCreate({ body: toActivityCreateRequest(form) })
+    const response = await activityCreate({ body: toActivityCreateRequest(form) });
     if (response.error || !response.data?.id) {
-      error.value = 'Activity could not be created. Check the form and try again.'
-      return
+      error.value = 'Activity could not be created. Check the form and try again.';
+      return;
     }
-    await router.push(`/activities/${response.data.id}`)
+    await router.push(`/activities/${response.data.id}`);
   } catch {
-    error.value = 'Activity could not be created. Check your connection and try again.'
+    error.value = 'Activity could not be created. Check your connection and try again.';
   } finally {
-    creating.value = false
+    creating.value = false;
   }
-}
+};
 </script>
