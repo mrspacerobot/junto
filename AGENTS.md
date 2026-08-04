@@ -3,6 +3,7 @@
 This file is the project's committed home for project-intrinsic agent knowledge: build, test, release, architecture, and sharp-edge notes that should travel with the code.
 
 - Authentication intent is explicit: `/api/auth/request-code` is enumeration-safe sign-in, while `/api/auth/signup/request-code` validates the invite independently of account existence. Preserve this split; see `AuthService` and `AuthIntegrationTest`.
+- Auth-code replacement intentionally uses a PostgreSQL transaction advisory lock behind `AuthTokenIssuanceLock`, plus the partial unique index as the final invariant; see `PostgresAuthTokenIssuanceLock` and `AuthConcurrencyIntegrationTest`.
 
 ## Maintaining this file
 

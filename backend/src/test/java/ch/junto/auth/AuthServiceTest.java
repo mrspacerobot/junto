@@ -2,7 +2,6 @@ package ch.junto.auth;
 
 import ch.junto.auth.entity.AuthToken;
 import ch.junto.core.exception.ApiException;
-import ch.junto.email.EmailService;
 import ch.junto.fixtures.AuthTokenFixture;
 import ch.junto.fixtures.UserFixture;
 import ch.junto.invite.InviteService;
@@ -10,13 +9,9 @@ import ch.junto.user.UserService;
 import ch.junto.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mail.MailSendException;
 
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -24,9 +19,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,10 +30,8 @@ class AuthServiceTest {
     @Mock AuthTokenRepository authTokenRepository;
     @Mock UserService userService;
     @Mock InviteService inviteService;
-    @Mock EmailService emailService;
-    @Mock JdbcTemplate jdbcTemplate;
+    @Mock AuthCodeIssuer authCodeIssuer;
     @InjectMocks AuthService authService;
-    @Captor ArgumentCaptor<AuthToken> tokenCaptor;
 
     @Test
     void unknownSignInReturnsGenericSuccessWithoutIssuingToken() {
@@ -48,8 +39,7 @@ class AuthServiceTest {
 
         authService.requestSignInCode("new@junto.app");
 
-        verify(authTokenRepository, never()).saveAndFlush(any());
-        verify(emailService, never()).sendAuthCode(anyString(), anyString(), anyString());
+        verify(authCodeIssuer, never()).issue(any(), any());
     }
 
     @Test
@@ -59,23 +49,18 @@ class AuthServiceTest {
             .satisfies(exception -> assertThat(((ApiException) exception).getCode())
                 .isEqualTo("INVITE_REQUIRED"));
 
-        verify(userService, never()).findByEmail(anyString());
-        verify(inviteService, never()).validateSignupCode(anyString());
-        verify(authTokenRepository, never()).saveAndFlush(any());
+        verify(userService, never()).findByEmail(any());
+        verify(inviteService, never()).validateSignupCode(any());
+        verify(authCodeIssuer, never()).issue(any(), any());
     }
 
     @Test
     void validInviteIssuesTokenForNormalizedEmail() {
-        when(authTokenRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-
         authService.requestSignupCode("  New@Junto.App ", " JUNTO-ABC123 ");
 
         verify(inviteService).validateSignupCode("JUNTO-ABC123");
-        verify(userService, never()).findByEmail(anyString());
-        verify(authTokenRepository).deleteUnusedByEmail("new@junto.app");
-        verify(authTokenRepository).saveAndFlush(tokenCaptor.capture());
-        assertThat(tokenCaptor.getValue().getInviteCode()).isEqualTo("JUNTO-ABC123");
-        verify(emailService).sendAuthCode(eq("new@junto.app"), anyString(), anyString());
+        verify(userService, never()).findByEmail(any());
+        verify(authCodeIssuer).issue("new@junto.app", "JUNTO-ABC123");
     }
 
     @Test
@@ -85,17 +70,16 @@ class AuthServiceTest {
 
         authService.requestSignInCode("suspended@junto.app");
 
-        verify(authTokenRepository, never()).saveAndFlush(any());
-        verify(emailService, never()).sendAuthCode(anyString(), anyString(), anyString());
+        verify(authCodeIssuer, never()).issue(any(), any());
     }
 
     @Test
     void mailFailureIsActionableAndPropagatesForTransactionRollback() {
-        doThrow(new MailSendException("smtp unavailable"))
-            .when(emailService).sendAuthCode(eq("new@junto.app"), anyString(), anyString());
+        org.mockito.Mockito.doThrow(new AuthEmailDeliveryException())
+            .when(authCodeIssuer).issue("new@junto.app", "JUNTO-ABC123");
 
         assertThatThrownBy(() -> authService.requestSignupCode("new@junto.app", "JUNTO-ABC123"))
-            .isInstanceOf(ApiException.class)
+            .isInstanceOf(AuthEmailDeliveryException.class)
             .satisfies(exception -> {
                 ApiException apiException = (ApiException) exception;
                 assertThat(apiException.getCode()).isEqualTo("EMAIL_DELIVERY_FAILED");

@@ -21,6 +21,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -51,6 +55,19 @@ class AuthConcurrencyIntegrationTest extends TestContainerConfig {
             .findFirstByEmailAndUsedAtIsNullOrderByCreatedAtDesc(email)
             .orElseThrow()
             .getAttemptCount()).isEqualTo(5);
+    }
+
+    @Test
+    void concurrentCodeRequestsSerializeTokenReplacement() throws Exception {
+        String email = "code-request-race-" + UUID.randomUUID() + "@junto.app";
+        userRepository.save(UserFixture.newMember(email));
+
+        runConcurrently(5, index -> authService.requestSignInCode(email));
+
+        assertThat(authTokenRepository.findAll())
+            .filteredOn(token -> token.getEmail().equals(email) && !token.isUsed())
+            .hasSize(1);
+        verify(emailService, times(5)).sendAuthCode(eq(email), anyString(), anyString());
     }
 
     @Test
