@@ -65,6 +65,22 @@ application previously accepted a credential-bearing Render `DATABASE_URL` and
 parsed it in Java; that adapter is intentionally removed. `DATABASE_URL` is no
 longer read by the production profile.
 
+## Formatting
+
+Java uses Google Java Style through Spotless with a pinned `google-java-format`;
+Vue, TypeScript, JavaScript, CSS, JSON, and Markdown in the frontend use Prettier.
+CI fails on unformatted code.
+
+```bash
+# write
+cd backend && ./gradlew spotlessApply
+cd frontend && npm run format
+
+# verify
+cd backend && ./gradlew spotlessCheck
+cd frontend && npm run format:check
+```
+
 ## Verification
 
 ```bash

@@ -40,6 +40,10 @@ jobs:
           distribution: temurin
           cache: gradle
 
+      - name: Verify Java formatting
+        working-directory: backend
+        run: ./gradlew spotlessCheck --no-daemon
+
       - name: Compile and run complete backend suite
         working-directory: backend
         run: ./gradlew build --no-daemon
@@ -85,6 +89,10 @@ jobs:
       - name: Regenerate API bindings
         working-directory: frontend
         run: npm run generate-api
+
+      - name: Verify frontend formatting
+        working-directory: frontend
+        run: npm run format:check
 
       - name: Type-check, unit-test, and build frontend
         working-directory: frontend
