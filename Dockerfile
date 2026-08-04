@@ -1,4 +1,6 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+
+ARG SOURCE_DATE_EPOCH=946684800
 
 # Builder images are pinned to immutable multi-platform manifests. Node and the JDK
 # never cross into the runtime stage.
@@ -19,6 +21,7 @@ RUN npm run generate-api && npm run build
 
 FROM eclipse-temurin:21.0.10_7-jdk-alpine-3.23@sha256:bcc7ec7e8fef937ba9f01ee5f810361d722c6b5dbe19ac188ab7b25c1a4dd2c9 AS backend-build
 
+ARG SOURCE_DATE_EPOCH
 WORKDIR /workspace/backend
 COPY backend/gradlew backend/build.gradle backend/settings.gradle ./
 COPY backend/gradle/ ./gradle/
@@ -34,8 +37,12 @@ RUN --mount=type=cache,target=/root/.gradle \
     artifact="$(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-plain.jar' ! -name '*-test-fixtures.jar' -print -quit)" && \
     test -n "$artifact" && \
     jar tf "$artifact" | grep -q '^BOOT-INF/classes/static/index.html$' && \
-    cp "$artifact" /workspace/junto.jar && \
-    touch -d '2000-01-01T00:00:00Z' /workspace/junto.jar
+    mkdir -p /workspace/runtime/app && \
+    cp "$artifact" /workspace/runtime/app/junto.jar && \
+    touch -d "@${SOURCE_DATE_EPOCH}" \
+      /workspace/runtime/app/junto.jar \
+      /workspace/runtime/app \
+      /workspace/runtime
 
 # Distroless supplies only a Java 21 runtime and OS runtime data: no shell,
 # package manager, Node/npm, or JDK tooling.
@@ -45,8 +52,10 @@ LABEL org.opencontainers.image.title="Junto" \
       org.opencontainers.image.description="Junto Vue frontend and Spring Boot production application" \
       org.opencontainers.image.source="https://github.com/mrspacerobot/junto"
 
+# Copy a complete, source-epoch-normalized runtime tree so the /app directory
+# metadata is deterministic as well as the JAR itself.
+COPY --from=backend-build --chown=65532:65532 /workspace/runtime/ /
 WORKDIR /app
-COPY --from=backend-build --chown=65532:65532 /workspace/junto.jar /app/junto.jar
 
 ENV SPRING_PROFILES_ACTIVE=prod \
     JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -Djava.io.tmpdir=/tmp"

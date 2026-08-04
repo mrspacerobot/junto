@@ -70,9 +70,18 @@ longer read by the production profile.
 Build the same pinned, multi-stage artifact used by CI from the repository root:
 
 ```bash
-docker build --pull --tag junto:local .
+source_date_epoch="$(git show -s --format=%ct HEAD)"
+docker build --pull \
+  --build-arg SOURCE_DATE_EPOCH="$source_date_epoch" \
+  --tag junto:local .
 ./scripts/verify-image.sh junto:local
+./scripts/scan-image-secrets.sh junto:local
 ```
+
+CI additionally builds twice without cache for one fixed platform and compares
+the runtime platform manifests. Provenance is disabled only for that equality
+check because per-build attestations can legitimately change the outer image
+index.
 
 The image serves the compiled Vue application and Spring Boot API together on
 port 8080 and activates the `prod` profile by default. It needs an external
