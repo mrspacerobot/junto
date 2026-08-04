@@ -34,33 +34,39 @@ build_archive() {
     --provenance=false \
     --build-arg "SOURCE_DATE_EPOCH=$source_date_epoch" \
     --tag "$image" \
-    --output "type=oci,dest=$destination" \
+    --output "type=docker,dest=$destination" \
     "$repository_root"
 }
 
 platform_manifest() {
   local archive="$1"
   python3 - "$archive" "$platform_os" "$platform_arch" "${platform_variant:-}" <<'PY'
+import hashlib
 import json
 import sys
 import tarfile
 
 archive, wanted_os, wanted_arch, wanted_variant = sys.argv[1:]
 with tarfile.open(archive) as image:
-    index = json.load(image.extractfile("index.json"))
-matches = []
-for manifest in index.get("manifests", []):
-    platform = manifest.get("platform", {})
-    if platform.get("os") != wanted_os or platform.get("architecture") != wanted_arch:
-        continue
-    if wanted_variant and platform.get("variant", "") != wanted_variant:
-        continue
-    matches.append(manifest["digest"])
-if len(matches) != 1:
+    manifest_json = json.load(image.extractfile("manifest.json"))
+    if len(manifest_json) != 1:
+        raise SystemExit(
+            f"expected one image entry in docker archive, found {len(manifest_json)}"
+        )
+    config_path = manifest_json[0]["Config"]
+    config_bytes = image.extractfile(config_path).read()
+config = json.loads(config_bytes)
+if config.get("os") != wanted_os or config.get("architecture") != wanted_arch:
     raise SystemExit(
-        f"expected one {wanted_os}/{wanted_arch} platform manifest, found {len(matches)}"
+        f"image platform {config.get('os')}/{config.get('architecture')} "
+        f"does not match requested {wanted_os}/{wanted_arch}"
     )
-print(matches[0])
+if wanted_variant and config.get("variant", "") != wanted_variant:
+    raise SystemExit(
+        f"image variant {config.get('variant', '')} does not match requested {wanted_variant}"
+    )
+digest = "sha256:" + hashlib.sha256(config_bytes).hexdigest()
+print(digest)
 PY
 }
 
