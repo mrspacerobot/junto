@@ -31,24 +31,13 @@ public class InviteService {
   }
 
   /**
-   * Validate that a code exists, is not used, and is not revoked. Throws
-   * ApiException("INVITE_CODE_INVALID") if invalid.
+   * Keep every unavailable-invite response identical so signup does not disclose whether a code is
+   * unknown, used, or revoked.
    */
-  public boolean isValidCode(String code) {
-    return code != null && inviteCodeRepository.existsByCodeAndUsedAtIsNullAndRevokedAtIsNull(code);
-  }
-
-  public void validateCode(String code) {
-    InviteCode inviteCode =
-        inviteCodeRepository
-            .findByCode(code)
-            .orElseThrow(() -> new ApiException("INVITE_CODE_INVALID", "Invalid invite code", 400));
-
-    if (inviteCode.isUsed()) {
-      throw new ApiException("INVITE_CODE_INVALID", "Invite code has already been used", 400);
-    }
-    if (inviteCode.isRevoked()) {
-      throw new ApiException("INVITE_CODE_INVALID", "Invite code has been revoked", 400);
+  public void validateSignupCode(String code) {
+    if (!inviteCodeRepository.existsByCodeAndUsedAtIsNullAndRevokedAtIsNull(code)) {
+      throw new ApiException(
+          "INVITE_INVALID", "This invite is invalid or unavailable. Ask for a new invite.", 400);
     }
   }
 

@@ -407,6 +407,29 @@
         }
       }
     },
+    "/api/auth/signup/request-code": {
+      "post": {
+        "tags": [
+          "auth-controller"
+        ],
+        "operationId": "authRequestSignupCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestSignupCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/auth/request-code": {
       "post": {
         "tags": [
@@ -1568,7 +1591,7 @@
           }
         }
       },
-      "RequestCodeRequest": {
+      "RequestSignupCodeRequest": {
         "type": "object",
         "properties": {
           "email": {
@@ -1577,6 +1600,15 @@
           },
           "inviteCode": {
             "type": "string"
+          }
+        }
+      },
+      "RequestCodeRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "minLength": 1
           }
         }
       },

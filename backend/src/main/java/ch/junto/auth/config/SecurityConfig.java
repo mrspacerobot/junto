@@ -41,6 +41,7 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(
                         "/api/auth/request-code",
+                        "/api/auth/signup/request-code",
                         "/api/auth/verify",
                         "/api/auth/verify-token",
                         "/api/auth/dev-login")

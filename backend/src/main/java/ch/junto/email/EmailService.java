@@ -34,12 +34,9 @@ public class EmailService {
             + "\n\n"
             + "Expires in 10 minutes.");
 
-    try {
-      mailSender.send(message);
-      log.info("Auth email sent to {}", toEmail);
-    } catch (Exception e) {
-      log.error("Failed to send auth email to {}: {}", toEmail, e.getMessage());
-      // Don't throw — auth token is already saved. User can request again.
-    }
+    // Delivery failures propagate through AuthCodeService's transaction so
+    // the undelivered token is rolled back before API behavior is chosen.
+    mailSender.send(message);
+    log.info("Auth email sent to {}", toEmail);
   }
 }

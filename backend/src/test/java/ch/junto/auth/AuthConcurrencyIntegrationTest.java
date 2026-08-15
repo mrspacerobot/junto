@@ -1,6 +1,10 @@
 package ch.junto.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import ch.junto.base.TestContainerConfig;
 import ch.junto.core.exception.ApiException;
@@ -35,7 +39,7 @@ class AuthConcurrencyIntegrationTest extends TestContainerConfig {
   void concurrentWrongGuessesAtomicallyStopAtFiveAttempts() throws Exception {
     String email = "otp-race-" + UUID.randomUUID() + "@junto.app";
     userRepository.save(UserFixture.newMember(email));
-    authService.requestCode(email, null);
+    authService.requestSignInCode(email);
 
     runConcurrently(
         10,
@@ -54,6 +58,19 @@ class AuthConcurrencyIntegrationTest extends TestContainerConfig {
                 .orElseThrow()
                 .getAttemptCount())
         .isEqualTo(5);
+  }
+
+  @Test
+  void concurrentCodeRequestsSerializeTokenReplacement() throws Exception {
+    String email = "code-request-race-" + UUID.randomUUID() + "@junto.app";
+    userRepository.save(UserFixture.newMember(email));
+
+    runConcurrently(5, index -> authService.requestSignInCode(email));
+
+    assertThat(authTokenRepository.findAll())
+        .filteredOn(token -> token.getEmail().equals(email) && !token.isUsed())
+        .hasSize(1);
+    verify(emailService, times(5)).sendAuthCode(eq(email), anyString(), anyString());
   }
 
   @Test

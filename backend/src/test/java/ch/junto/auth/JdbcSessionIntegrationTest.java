@@ -43,12 +43,7 @@ class JdbcSessionIntegrationTest extends TestContainerConfig {
     CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
     HttpClient client = HttpClient.newBuilder().cookieHandler(cookies).build();
 
-    assertThat(
-            post(
-                    client,
-                    "/api/auth/request-code",
-                    "{\"email\":\"" + email + "\",\"inviteCode\":null}")
-                .statusCode())
+    assertThat(post(client, "/api/auth/request-code", "{\"email\":\"" + email + "\"}").statusCode())
         .isEqualTo(200);
     String code =
         authTokenRepository

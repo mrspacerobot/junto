@@ -30,7 +30,9 @@ public class AuthController {
     this.authRateLimiter = authRateLimiter;
   }
 
-  public record RequestCodeRequest(@NotBlank @Email String email, String inviteCode) {}
+  public record RequestCodeRequest(@NotBlank @Email String email) {}
+
+  public record RequestSignupCodeRequest(@NotBlank @Email String email, String inviteCode) {}
 
   public record VerifyCodeRequest(
       @NotBlank @Email String email, @NotBlank @Pattern(regexp = "\\d{6}") String code) {}
@@ -41,7 +43,14 @@ public class AuthController {
   public void requestCode(
       @RequestBody @Valid RequestCodeRequest request, HttpServletRequest servletRequest) {
     authRateLimiter.checkCodeRequest(request.email(), servletRequest.getRemoteAddr());
-    authService.requestCode(request.email(), request.inviteCode());
+    authService.requestSignInCode(request.email());
+  }
+
+  @PostMapping("/signup/request-code")
+  public void requestSignupCode(
+      @RequestBody @Valid RequestSignupCodeRequest request, HttpServletRequest servletRequest) {
+    authRateLimiter.checkCodeRequest(request.email(), servletRequest.getRemoteAddr());
+    authService.requestSignupCode(request.email(), request.inviteCode());
   }
 
   @PostMapping("/verify")
