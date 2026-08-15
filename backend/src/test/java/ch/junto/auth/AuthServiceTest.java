@@ -30,7 +30,7 @@ class AuthServiceTest {
     @Mock AuthTokenRepository authTokenRepository;
     @Mock UserService userService;
     @Mock InviteService inviteService;
-    @Mock AuthCodeIssuer authCodeIssuer;
+    @Mock AuthCodeService authCodeService;
     @InjectMocks AuthService authService;
 
     @Test
@@ -39,7 +39,7 @@ class AuthServiceTest {
 
         authService.requestSignInCode("new@junto.app");
 
-        verify(authCodeIssuer, never()).issue(any(), any());
+        verify(authCodeService, never()).issue(any(), any());
     }
 
     @Test
@@ -51,7 +51,7 @@ class AuthServiceTest {
 
         verify(userService, never()).findByEmail(any());
         verify(inviteService, never()).validateSignupCode(any());
-        verify(authCodeIssuer, never()).issue(any(), any());
+        verify(authCodeService, never()).issue(any(), any());
     }
 
     @Test
@@ -60,7 +60,7 @@ class AuthServiceTest {
 
         verify(inviteService).validateSignupCode("JUNTO-ABC123");
         verify(userService, never()).findByEmail(any());
-        verify(authCodeIssuer).issue("new@junto.app", "JUNTO-ABC123");
+        verify(authCodeService).issue("new@junto.app", "JUNTO-ABC123");
     }
 
     @Test
@@ -70,13 +70,13 @@ class AuthServiceTest {
 
         authService.requestSignInCode("suspended@junto.app");
 
-        verify(authCodeIssuer, never()).issue(any(), any());
+        verify(authCodeService, never()).issue(any(), any());
     }
 
     @Test
     void mailFailureIsActionableAndPropagatesForTransactionRollback() {
         org.mockito.Mockito.doThrow(new AuthEmailDeliveryException())
-            .when(authCodeIssuer).issue("new@junto.app", "JUNTO-ABC123");
+            .when(authCodeService).issue("new@junto.app", "JUNTO-ABC123");
 
         assertThatThrownBy(() -> authService.requestSignupCode("new@junto.app", "JUNTO-ABC123"))
             .isInstanceOf(AuthEmailDeliveryException.class)

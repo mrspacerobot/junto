@@ -14,19 +14,19 @@ import java.util.UUID;
 
 /** Owns the transaction that persists and delivers a replacement authentication code. */
 @Service
-public class AuthCodeIssuer {
+public class AuthCodeService {
 
-    private static final Logger log = LoggerFactory.getLogger(AuthCodeIssuer.class);
+    private static final Logger log = LoggerFactory.getLogger(AuthCodeService.class);
     private static final int CODE_EXPIRY_MINUTES = 10;
     private static final SecureRandom secureRandom = new SecureRandom();
 
     private final AuthTokenRepository authTokenRepository;
-    private final AuthTokenIssuanceLock issuanceLock;
+    private final PostgresAuthTokenIssuanceLock issuanceLock;
     private final EmailService emailService;
 
-    public AuthCodeIssuer(AuthTokenRepository authTokenRepository,
-                          AuthTokenIssuanceLock issuanceLock,
-                          EmailService emailService) {
+    public AuthCodeService(AuthTokenRepository authTokenRepository,
+                           PostgresAuthTokenIssuanceLock issuanceLock,
+                           EmailService emailService) {
         this.authTokenRepository = authTokenRepository;
         this.issuanceLock = issuanceLock;
         this.emailService = emailService;
@@ -58,6 +58,5 @@ public class AuthCodeIssuer {
             log.error("Failed to deliver authentication email", exception);
             throw new AuthEmailDeliveryException();
         }
-        log.info("Auth code requested");
     }
 }
