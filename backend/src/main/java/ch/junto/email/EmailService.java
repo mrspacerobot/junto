@@ -33,7 +33,7 @@ public class EmailService {
             "Expires in 10 minutes."
         );
 
-        // Delivery failures propagate through AuthCodeIssuer's transaction so
+        // Delivery failures propagate through AuthCodeService's transaction so
         // the undelivered token is rolled back before API behavior is chosen.
         mailSender.send(message);
         log.info("Auth email sent to {}", toEmail);

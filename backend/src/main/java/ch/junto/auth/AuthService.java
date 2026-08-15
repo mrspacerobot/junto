@@ -24,16 +24,16 @@ public class AuthService {
     private final AuthTokenRepository authTokenRepository;
     private final UserService userService;
     private final InviteService inviteService;
-    private final AuthCodeIssuer authCodeIssuer;
+    private final AuthCodeService authCodeService;
 
     public AuthService(AuthTokenRepository authTokenRepository,
                        UserService userService,
                        InviteService inviteService,
-                       AuthCodeIssuer authCodeIssuer) {
+                       AuthCodeService authCodeService) {
         this.authTokenRepository = authTokenRepository;
         this.userService = userService;
         this.inviteService = inviteService;
-        this.authCodeIssuer = authCodeIssuer;
+        this.authCodeService = authCodeService;
     }
 
     /**
@@ -49,9 +49,9 @@ public class AuthService {
         }
 
         try {
-            authCodeIssuer.issue(normalizedEmail, null);
+            authCodeService.issue(normalizedEmail, null);
         } catch (AuthEmailDeliveryException exception) {
-            // AuthCodeIssuer's transaction has already rolled back. Suppress the
+            // AuthCodeService's transaction has already rolled back. Suppress the
             // typed failure here so sign-in remains account-enumeration-safe.
             log.warn("Sign-in code delivery failed; returning generic response");
         }
@@ -69,7 +69,7 @@ public class AuthService {
 
         String normalizedInviteCode = inviteCode.trim();
         inviteService.validateSignupCode(normalizedInviteCode);
-        authCodeIssuer.issue(normalizeEmail(email), normalizedInviteCode);
+        authCodeService.issue(normalizeEmail(email), normalizedInviteCode);
     }
 
     @Transactional(noRollbackFor = AuthAttemptRejectedException.class)

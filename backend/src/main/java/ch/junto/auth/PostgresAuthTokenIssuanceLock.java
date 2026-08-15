@@ -1,7 +1,7 @@
 package ch.junto.auth;
 
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Component;
 
 /**
  * PostgreSQL-specific transaction lock for the delete/insert/deliver sequence.
@@ -11,8 +11,8 @@ import org.springframework.stereotype.Repository;
  * concurrent replacements wait instead of surfacing a unique-key failure, and
  * keeps delivery ordered with the transaction that makes its token current.
  */
-@Repository
-public class PostgresAuthTokenIssuanceLock implements AuthTokenIssuanceLock {
+@Component
+public class PostgresAuthTokenIssuanceLock {
 
     private static final String LOCK_NORMALIZED_EMAIL =
         "SELECT pg_advisory_xact_lock(hashtext(?))";
@@ -23,7 +23,6 @@ public class PostgresAuthTokenIssuanceLock implements AuthTokenIssuanceLock {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    @Override
     public void acquire(String normalizedEmail) {
         jdbcTemplate.queryForObject(LOCK_NORMALIZED_EMAIL, Object.class, normalizedEmail);
     }

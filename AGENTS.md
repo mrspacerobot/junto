@@ -4,7 +4,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - See `README.md` for the authoritative build, verification, production SPA packaging, and routing contract.
 - Authentication intent is explicit: `/api/auth/request-code` is enumeration-safe sign-in, while `/api/auth/signup/request-code` validates the invite independently of account existence. Preserve this split; see `AuthService` and `AuthIntegrationTest`.
-- Auth-code replacement intentionally uses a PostgreSQL transaction advisory lock behind `AuthTokenIssuanceLock`, plus the partial unique index as the final invariant; see `PostgresAuthTokenIssuanceLock` and `AuthConcurrencyIntegrationTest`.
+- Auth-code replacement in `AuthCodeService` intentionally uses `PostgresAuthTokenIssuanceLock` plus the partial unique index as the final invariant; see `AuthConcurrencyIntegrationTest`.
 
 ## Maintaining this file
 
