@@ -1,6 +1,5 @@
 package ch.junto.auth;
 
-import ch.junto.email.EmailService;
 import ch.junto.invite.InviteService;
 import ch.junto.auth.entity.AuthToken;
 import ch.junto.user.entity.User;
@@ -9,11 +8,9 @@ import ch.junto.core.exception.ApiException;
 import ch.junto.user.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,70 +19,57 @@ import java.util.UUID;
 public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
-    private static final int CODE_EXPIRY_MINUTES = 10;
     private static final int MAX_ATTEMPTS = 5;
-    private static final SecureRandom secureRandom = new SecureRandom();
 
     private final AuthTokenRepository authTokenRepository;
     private final UserService userService;
     private final InviteService inviteService;
-    private final EmailService emailService;
-    private final JdbcTemplate jdbcTemplate;
+    private final AuthCodeIssuer authCodeIssuer;
 
     public AuthService(AuthTokenRepository authTokenRepository,
                        UserService userService,
                        InviteService inviteService,
-                       EmailService emailService,
-                       JdbcTemplate jdbcTemplate) {
+                       AuthCodeIssuer authCodeIssuer) {
         this.authTokenRepository = authTokenRepository;
         this.userService = userService;
         this.inviteService = inviteService;
-        this.emailService = emailService;
-        this.jdbcTemplate = jdbcTemplate;
+        this.authCodeIssuer = authCodeIssuer;
     }
 
-    @Transactional
-    public void requestCode(String email, String inviteCode) {
+    /**
+     * Sign-in deliberately keeps the same public response for known and unknown
+     * email addresses. Only active existing accounts receive a code.
+     */
+    public void requestSignInCode(String email) {
         String normalizedEmail = normalizeEmail(email);
-
-        // A transaction-scoped advisory lock prevents concurrent requests for
-        // the same email from racing the delete/insert token replacement.
-        jdbcTemplate.queryForObject(
-            "SELECT pg_advisory_xact_lock(hashtext(?))", Object.class, normalizedEmail);
-
         Optional<User> existingUser = userService.findByEmail(normalizedEmail);
-
-        // Keep the public response generic so request-code cannot enumerate
-        // accounts. No token or email is produced when signup prerequisites fail.
-        if (existingUser.isEmpty()) {
-            if (inviteCode == null || inviteCode.isBlank() || !inviteService.isValidCode(inviteCode)) {
-                log.info("Auth code request accepted without issuing a token");
-                return;
-            }
-        } else if (existingUser.get().getStatus() != UserStatus.ACTIVE) {
-            log.info("Auth code request accepted for an inactive account");
+        if (existingUser.isEmpty() || existingUser.get().getStatus() != UserStatus.ACTIVE) {
+            log.info("Sign-in code request accepted without issuing a token");
             return;
         }
 
-        // Invalidate any previous unused tokens for this email
-        authTokenRepository.deleteUnusedByEmail(normalizedEmail);
+        try {
+            authCodeIssuer.issue(normalizedEmail, null);
+        } catch (AuthEmailDeliveryException exception) {
+            // AuthCodeIssuer's transaction has already rolled back. Suppress the
+            // typed failure here so sign-in remains account-enumeration-safe.
+            log.warn("Sign-in code delivery failed; returning generic response");
+        }
+    }
 
-        String code = String.format("%06d", secureRandom.nextInt(1000000));
-        UUID token = UUID.randomUUID();
-
-        AuthToken authToken = new AuthToken();
-        authToken.setEmail(normalizedEmail);
-        authToken.setToken(token);
-        authToken.setCode(code);
-        authToken.setExpiresAt(OffsetDateTime.now().plusMinutes(CODE_EXPIRY_MINUTES));
-
-        if (existingUser.isEmpty() && inviteCode != null) {
-            authToken.setInviteCode(inviteCode);
+    /**
+     * Signup errors depend only on explicit create-account intent and the
+     * submitted invite, never on whether the email already has an account.
+     */
+    public void requestSignupCode(String email, String inviteCode) {
+        if (inviteCode == null || inviteCode.isBlank()) {
+            throw new ApiException("INVITE_REQUIRED",
+                "An invite code is required to create an account.", 400);
         }
 
-        authTokenRepository.saveAndFlush(authToken);
-        emailService.sendAuthCode(normalizedEmail, code, token.toString());
-        log.info("Auth code requested");
+        String normalizedInviteCode = inviteCode.trim();
+        inviteService.validateSignupCode(normalizedInviteCode);
+        authCodeIssuer.issue(normalizeEmail(email), normalizedInviteCode);
     }
 
     @Transactional(noRollbackFor = AuthAttemptRejectedException.class)

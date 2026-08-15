@@ -38,7 +38,7 @@ public class SecurityConfig {
         http
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll()
-                .requestMatchers("/api/auth/request-code", "/api/auth/verify", "/api/auth/verify-token", "/api/auth/dev-login").permitAll()
+                .requestMatchers("/api/auth/request-code", "/api/auth/signup/request-code", "/api/auth/verify", "/api/auth/verify-token", "/api/auth/dev-login").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
                 .requestMatchers("/ws", "/ws/**").permitAll()
