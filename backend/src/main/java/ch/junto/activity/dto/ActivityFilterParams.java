@@ -6,64 +6,112 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 
 /**
- * Filter parameters for GET /api/activities.
- * Must be a mutable class (not a record) so Spring MVC can bind
- * customFields[key]=value query params into the Map field.
+ * Filter parameters for GET /api/activities. Must be a mutable class (not a record) so Spring MVC
+ * can bind customFields[key]=value query params into the Map field.
  */
 public class ActivityFilterParams {
 
-    private String city;
+  private String city;
 
-    @Schema(example = "cycling")
-    private String typeSlug;
+  @Schema(example = "cycling")
+  private String typeSlug;
 
-    private ActivityStatus status;
-    private OffsetDateTime fromDate;
-    private OffsetDateTime toDate;
-    private Boolean joinable;
+  private ActivityStatus status;
+  private OffsetDateTime fromDate;
+  private OffsetDateTime toDate;
+  private Boolean joinable;
 
-    /**
-     * Custom field equality filters. Requires typeSlug to be set.
-     * Only SELECT fields are supported in v1.
-     * Example: customFields[style]=Bouldering
-     */
-    private Map<String, String> customFields;
+  /**
+   * Custom field equality filters. Requires typeSlug to be set. Only SELECT fields are supported in
+   * v1. Example: customFields[style]=Bouldering
+   */
+  private Map<String, String> customFields;
 
-    public String getCity() { return city; }
-    public void setCity(String city) { this.city = city; }
+  public String getCity() {
+    return city;
+  }
 
-    public String getTypeSlug() { return typeSlug; }
-    public void setTypeSlug(String typeSlug) { this.typeSlug = typeSlug; }
+  public void setCity(String city) {
+    this.city = city;
+  }
 
-    public ActivityStatus getStatus() { return status; }
-    public void setStatus(ActivityStatus status) { this.status = status; }
+  public String getTypeSlug() {
+    return typeSlug;
+  }
 
-    public OffsetDateTime getFromDate() { return fromDate; }
-    public void setFromDate(OffsetDateTime fromDate) { this.fromDate = fromDate; }
+  public void setTypeSlug(String typeSlug) {
+    this.typeSlug = typeSlug;
+  }
 
-    public OffsetDateTime getToDate() { return toDate; }
-    public void setToDate(OffsetDateTime toDate) { this.toDate = toDate; }
+  public ActivityStatus getStatus() {
+    return status;
+  }
 
-    public Boolean getJoinable() { return joinable; }
-    public void setJoinable(Boolean joinable) { this.joinable = joinable; }
+  public void setStatus(ActivityStatus status) {
+    this.status = status;
+  }
 
-    public Map<String, String> getCustomFields() { return customFields; }
-    public void setCustomFields(Map<String, String> customFields) { this.customFields = customFields; }
+  public OffsetDateTime getFromDate() {
+    return fromDate;
+  }
 
-    private Double lat;
-    private Double lng;
-    private Double radiusKm;
+  public void setFromDate(OffsetDateTime fromDate) {
+    this.fromDate = fromDate;
+  }
 
-    public Double getLat() { return lat; }
-    public void setLat(Double lat) { this.lat = lat; }
+  public OffsetDateTime getToDate() {
+    return toDate;
+  }
 
-    public Double getLng() { return lng; }
-    public void setLng(Double lng) { this.lng = lng; }
+  public void setToDate(OffsetDateTime toDate) {
+    this.toDate = toDate;
+  }
 
-    public Double getRadiusKm() { return radiusKm; }
-    public void setRadiusKm(Double radiusKm) { this.radiusKm = radiusKm; }
+  public Boolean getJoinable() {
+    return joinable;
+  }
 
-    public boolean hasLocation() {
-        return lat != null && lng != null;
-    }
+  public void setJoinable(Boolean joinable) {
+    this.joinable = joinable;
+  }
+
+  public Map<String, String> getCustomFields() {
+    return customFields;
+  }
+
+  public void setCustomFields(Map<String, String> customFields) {
+    this.customFields = customFields;
+  }
+
+  private Double lat;
+  private Double lng;
+  private Double radiusKm;
+
+  public Double getLat() {
+    return lat;
+  }
+
+  public void setLat(Double lat) {
+    this.lat = lat;
+  }
+
+  public Double getLng() {
+    return lng;
+  }
+
+  public void setLng(Double lng) {
+    this.lng = lng;
+  }
+
+  public Double getRadiusKm() {
+    return radiusKm;
+  }
+
+  public void setRadiusKm(Double radiusKm) {
+    this.radiusKm = radiusKm;
+  }
+
+  public boolean hasLocation() {
+    return lat != null && lng != null;
+  }
 }

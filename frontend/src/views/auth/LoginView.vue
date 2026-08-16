@@ -34,7 +34,9 @@
 
           <form novalidate @submit.prevent="handleRequestCode" class="space-y-6">
             <div>
-              <label for="email" class="block text-sm font-semibold text-slate-700">Email address</label>
+              <label for="email" class="block text-sm font-semibold text-slate-700"
+                >Email address</label
+              >
               <div class="mt-1">
                 <input
                   id="email"
@@ -49,7 +51,9 @@
             </div>
 
             <div v-if="mode === 'SIGN_UP'">
-              <label for="inviteCode" class="block text-sm font-semibold text-slate-700">Invite Code</label>
+              <label for="inviteCode" class="block text-sm font-semibold text-slate-700"
+                >Invite Code</label
+              >
               <div class="mt-1">
                 <input
                   id="inviteCode"
@@ -61,7 +65,9 @@
                   class="appearance-none block w-full px-4 py-3 border border-warm-300 rounded-xl shadow-sm placeholder-[#9D998F] focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-all"
                 />
               </div>
-              <p class="mt-2 text-xs text-[#6A6560]">A valid invite is required for every new account.</p>
+              <p class="mt-2 text-xs text-[#6A6560]">
+                A valid invite is required for every new account.
+              </p>
             </div>
 
             <div>
@@ -78,7 +84,9 @@
 
         <form v-else @submit.prevent="handleVerify" class="space-y-6">
           <div>
-            <label for="code" class="block text-sm font-semibold text-slate-700 text-center mb-4">Verification Code</label>
+            <label for="code" class="block text-sm font-semibold text-slate-700 text-center mb-4"
+              >Verification Code</label
+            >
             <div class="mt-1">
               <input
                 id="code"
@@ -146,9 +154,11 @@ const code = ref('');
 const loading = ref(false);
 const error = ref('');
 
-const modeDescription = computed(() => mode.value === 'SIGN_IN'
-  ? 'Sign in to your existing account. No invite is needed.'
-  : 'Create a new account with a valid invite.');
+const modeDescription = computed(() =>
+  mode.value === 'SIGN_IN'
+    ? 'Sign in to your existing account. No invite is needed.'
+    : 'Create a new account with a valid invite.',
+);
 
 const verificationPrompt = computed(() => {
   const destination = email.value.trim();
@@ -193,11 +203,12 @@ const handleRequestCode = async () => {
 
   loading.value = true;
   try {
-    const result = mode.value === 'SIGN_UP'
-      ? await authRequestSignupCode({
-          body: { email: email.value.trim(), inviteCode: inviteCode.value.trim() },
-        })
-      : await authRequestCode({ body: { email: email.value.trim() } });
+    const result =
+      mode.value === 'SIGN_UP'
+        ? await authRequestSignupCode({
+            body: { email: email.value.trim(), inviteCode: inviteCode.value.trim() },
+          })
+        : await authRequestCode({ body: { email: email.value.trim() } });
     if (result.error) {
       error.value = apiErrorMessage(result.error, 'Failed to request code');
     } else {

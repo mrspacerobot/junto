@@ -1,6 +1,6 @@
-import { defineConfig } from 'vitest/config'
-import vue from '@vitejs/plugin-vue'
-import path from 'node:path'
+import { defineConfig } from 'vitest/config';
+import vue from '@vitejs/plugin-vue';
+import path from 'node:path';
 
 export default defineConfig({
   plugins: [vue()],
@@ -13,4 +13,4 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.spec.ts'],
   },
-})
+});

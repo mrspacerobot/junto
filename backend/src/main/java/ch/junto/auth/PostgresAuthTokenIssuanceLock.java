@@ -6,24 +6,23 @@ import org.springframework.stereotype.Component;
 /**
  * PostgreSQL-specific transaction lock for the delete/insert/deliver sequence.
  *
- * <p>The partial unique index {@code idx_auth_tokens_one_unused_per_email} is
- * the final database invariant. The advisory lock additionally makes
- * concurrent replacements wait instead of surfacing a unique-key failure, and
- * keeps delivery ordered with the transaction that makes its token current.
+ * <p>The partial unique index {@code idx_auth_tokens_one_unused_per_email} is the final database
+ * invariant. The advisory lock additionally makes concurrent replacements wait instead of surfacing
+ * a unique-key failure, and keeps delivery ordered with the transaction that makes its token
+ * current.
  */
 @Component
 public class PostgresAuthTokenIssuanceLock {
 
-    private static final String LOCK_NORMALIZED_EMAIL =
-        "SELECT pg_advisory_xact_lock(hashtext(?))";
+  private static final String LOCK_NORMALIZED_EMAIL = "SELECT pg_advisory_xact_lock(hashtext(?))";
 
-    private final JdbcTemplate jdbcTemplate;
+  private final JdbcTemplate jdbcTemplate;
 
-    public PostgresAuthTokenIssuanceLock(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+  public PostgresAuthTokenIssuanceLock(JdbcTemplate jdbcTemplate) {
+    this.jdbcTemplate = jdbcTemplate;
+  }
 
-    public void acquire(String normalizedEmail) {
-        jdbcTemplate.queryForObject(LOCK_NORMALIZED_EMAIL, Object.class, normalizedEmail);
-    }
+  public void acquire(String normalizedEmail) {
+    jdbcTemplate.queryForObject(LOCK_NORMALIZED_EMAIL, Object.class, normalizedEmail);
+  }
 }

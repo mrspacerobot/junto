@@ -16,8 +16,8 @@ export function useCoordinates(point: ComputedRef<GeoPoint | undefined>) {
   const lng = computed(() => point.value?.coordinates[0]);
   const lat = computed(() => point.value?.coordinates[1]);
 
-  const hasCoordinates = computed(() =>
-    point.value?.coordinates && point.value.coordinates.length >= 2
+  const hasCoordinates = computed(
+    () => point.value?.coordinates && point.value.coordinates.length >= 2,
   );
 
   return {
@@ -28,6 +28,6 @@ export function useCoordinates(point: ComputedRef<GeoPoint | undefined>) {
     formatted: computed(() => {
       if (!hasCoordinates.value) return 'Location not set';
       return `${lat.value?.toFixed(4)}, ${lng.value?.toFixed(4)}`;
-    })
+    }),
   };
 }

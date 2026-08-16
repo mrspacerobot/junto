@@ -13,14 +13,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/reports")
 public class ReportController {
 
-    private final ReportService reportService;
+  private final ReportService reportService;
 
-    public ReportController(ReportService reportService) {
-        this.reportService = reportService;
-    }
+  public ReportController(ReportService reportService) {
+    this.reportService = reportService;
+  }
 
-    @PostMapping
-    public Report submit(@RequestBody @Valid ReportService.ReportCreateRequest request, @CurrentUser User user) {
-        return reportService.submitReport(request, user);
-    }
+  @PostMapping
+  public Report submit(
+      @RequestBody @Valid ReportService.ReportCreateRequest request, @CurrentUser User user) {
+    return reportService.submitReport(request, user);
+  }
 }

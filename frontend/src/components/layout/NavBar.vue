@@ -11,7 +11,11 @@
             <router-link
               to="/activities"
               class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-              :class="[$route.path.startsWith('/activities') ? 'border-primary-500 text-slate-900' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700']"
+              :class="[
+                $route.path.startsWith('/activities')
+                  ? 'border-primary-500 text-slate-900'
+                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700',
+              ]"
             >
               Feed
             </router-link>
@@ -37,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
-import JuntoLogo from '@/components/JuntoLogo.vue'
-const $route = useRoute()
+import { useRoute } from 'vue-router';
+import JuntoLogo from '@/components/JuntoLogo.vue';
+const $route = useRoute();
 </script>

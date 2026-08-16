@@ -1,14 +1,19 @@
 <template>
-  <form @submit.prevent="$emit('submit', form)" class="space-y-8 bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
+  <form
+    @submit.prevent="$emit('submit', form)"
+    class="space-y-8 bg-white border border-slate-200 rounded-2xl p-8 shadow-sm"
+  >
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
       <!-- Basic Info -->
       <div class="space-y-6">
-        <h3 class="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">Basic Information</h3>
+        <h3 class="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
+          Basic Information
+        </h3>
 
         <div class="space-y-2">
           <label class="text-sm font-semibold text-slate-700">Activity Type</label>
           <div class="grid grid-cols-3 gap-3">
-             <button
+            <button
               v-for="type in types"
               :key="type.slug"
               type="button"
@@ -17,7 +22,7 @@
                 'flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all',
                 form.typeSlug === type.slug
                   ? 'border-primary-500 bg-primary-50 text-primary-700'
-                  : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
+                  : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200',
               ]"
             >
               <span class="text-xs font-bold">{{ type.name }}</span>
@@ -110,7 +115,9 @@
 
       <!-- Custom Fields (Dynamic) -->
       <div v-if="selectedType?.customFields?.length" class="space-y-6 md:col-span-2">
-        <h3 class="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">Activity Specific Details</h3>
+        <h3 class="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
+          Activity Specific Details
+        </h3>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div v-for="field in selectedType.customFields" :key="field.name" class="space-y-2">
@@ -147,7 +154,9 @@
                   :required="field.required"
                   class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                 />
-                <span class="text-sm font-medium text-slate-500 min-w-fit">{{ field.unit ? (unitLabels[field.unit] ?? field.unit) : '' }}</span>
+                <span class="text-sm font-medium text-slate-500 min-w-fit">{{
+                  field.unit ? (unitLabels[field.unit] ?? field.unit) : ''
+                }}</span>
               </div>
             </template>
 
@@ -202,7 +211,6 @@
           </div>
         </div>
       </div>
-
     </div>
 
     <div class="pt-6 border-t border-slate-100 flex justify-end gap-4">
@@ -225,19 +233,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import type {
-  ActivityFormValues,
-  ActivityTypeOption,
-  DateRangeValue,
-} from '@/api/transforms'
+import { ref, computed, watch } from 'vue';
+import type { ActivityFormValues, ActivityTypeOption, DateRangeValue } from '@/api/transforms';
 
 const props = defineProps<{
-  types: ActivityTypeOption[]
-  loading?: boolean
-}>()
+  types: ActivityTypeOption[];
+  loading?: boolean;
+}>();
 
-defineEmits<{ submit: [form: ActivityFormValues] }>()
+defineEmits<{ submit: [form: ActivityFormValues] }>();
 
 const unitLabels: Record<string, string> = {
   KM: 'km',
@@ -250,7 +254,7 @@ const unitLabels: Record<string, string> = {
   REPS: 'reps',
   KG: 'kg',
   LBS: 'lbs',
-}
+};
 
 const form = ref<ActivityFormValues>({
   title: '',
@@ -262,37 +266,42 @@ const form = ref<ActivityFormValues>({
   maxParticipants: 10,
   joinPolicy: 'OPEN',
   customFields: {},
-})
+});
 
-const selectedType = computed(() =>
-  props.types.find(type => type.slug === form.value.typeSlug),
-)
+const selectedType = computed(() => props.types.find((type) => type.slug === form.value.typeSlug));
 
-watch(() => props.types, types => {
-  if (!form.value.typeSlug && types.length > 0) {
-    form.value.typeSlug = types[0].slug
-  }
-}, { immediate: true })
-
-watch(() => form.value.typeSlug, () => {
-  form.value.customFields = {}
-  selectedType.value?.customFields.forEach(field => {
-    if (field.type === 'DATE_RANGE') {
-      form.value.customFields[field.name] = { start: '', end: '' }
+watch(
+  () => props.types,
+  (types) => {
+    if (!form.value.typeSlug && types.length > 0) {
+      form.value.typeSlug = types[0].slug;
     }
-  })
-})
+  },
+  { immediate: true },
+);
+
+watch(
+  () => form.value.typeSlug,
+  () => {
+    form.value.customFields = {};
+    selectedType.value?.customFields.forEach((field) => {
+      if (field.type === 'DATE_RANGE') {
+        form.value.customFields[field.name] = { start: '', end: '' };
+      }
+    });
+  },
+);
 
 function dateRangeValue(fieldName: string): DateRangeValue {
-  const value = form.value.customFields[fieldName]
-  return typeof value === 'object' ? value : { start: '', end: '' }
+  const value = form.value.customFields[fieldName];
+  return typeof value === 'object' ? value : { start: '', end: '' };
 }
 
 function setDateRangePart(fieldName: string, part: keyof DateRangeValue, event: Event) {
-  const input = event.target as HTMLInputElement
+  const input = event.target as HTMLInputElement;
   form.value.customFields[fieldName] = {
     ...dateRangeValue(fieldName),
     [part]: input.value,
-  }
+  };
 }
 </script>

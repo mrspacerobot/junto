@@ -9,9 +9,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class UnknownApiController {
 
-    @RequestMapping("/api/{*path}")
-    public void notFound(HttpServletRequest request) {
-        throw new NotFoundException(
-            "No API route for " + request.getMethod() + " " + request.getRequestURI());
-    }
+  @RequestMapping("/api/{*path}")
+  public void notFound(HttpServletRequest request) {
+    throw new NotFoundException(
+        "No API route for " + request.getMethod() + " " + request.getRequestURI());
+  }
 }

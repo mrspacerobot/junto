@@ -19,5 +19,4 @@ public record ActivityUpdateRequest(
     OffsetDateTime signupDeadline,
     @Min(1) Integer maxParticipants,
     JoinPolicy joinPolicy,
-    CustomFields customFields
-) {}
+    CustomFields customFields) {}

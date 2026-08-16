@@ -10,23 +10,23 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 @Component
 public class WebSocketSessionListener {
 
-    private static final Logger log = LoggerFactory.getLogger(WebSocketSessionListener.class);
+  private static final Logger log = LoggerFactory.getLogger(WebSocketSessionListener.class);
 
-    private final WebSocketSessionRegistry sessionRegistry;
+  private final WebSocketSessionRegistry sessionRegistry;
 
-    public WebSocketSessionListener(WebSocketSessionRegistry sessionRegistry) {
-        this.sessionRegistry = sessionRegistry;
-    }
+  public WebSocketSessionListener(WebSocketSessionRegistry sessionRegistry) {
+    this.sessionRegistry = sessionRegistry;
+  }
 
-    @EventListener
-    public void onWebSocketDisconnect(SessionDisconnectEvent event) {
-        sessionRegistry.removeWebSocketSession(event.getSessionId());
-        log.debug("WebSocket session disconnected: {}", event.getSessionId());
-    }
+  @EventListener
+  public void onWebSocketDisconnect(SessionDisconnectEvent event) {
+    sessionRegistry.removeWebSocketSession(event.getSessionId());
+    log.debug("WebSocket session disconnected: {}", event.getSessionId());
+  }
 
-    @EventListener
-    public void onHttpSessionDestroyed(SessionDestroyedEvent event) {
-        sessionRegistry.revokeHttpSession(event.getSessionId());
-        log.debug("Revoked WebSockets for HTTP session: {}", event.getSessionId());
-    }
+  @EventListener
+  public void onHttpSessionDestroyed(SessionDestroyedEvent event) {
+    sessionRegistry.revokeHttpSession(event.getSessionId());
+    log.debug("Revoked WebSockets for HTTP session: {}", event.getSessionId());
+  }
 }

@@ -9,18 +9,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class ActivityAutoCompleteJob {
 
-    private static final Logger log = LoggerFactory.getLogger(ActivityAutoCompleteJob.class);
-    private final ActivityService activityService;
+  private static final Logger log = LoggerFactory.getLogger(ActivityAutoCompleteJob.class);
+  private final ActivityService activityService;
 
-    public ActivityAutoCompleteJob(ActivityService activityService) {
-        this.activityService = activityService;
-    }
+  public ActivityAutoCompleteJob(ActivityService activityService) {
+    this.activityService = activityService;
+  }
 
-    @Scheduled(cron = "0 0 * * * *") // Hourly
-    public void autoComplete() {
-        int completed = activityService.autoCompleteStartedActivities();
-        if (completed > 0) {
-            log.info("Auto-completed {} activities", completed);
-        }
+  @Scheduled(cron = "0 0 * * * *") // Hourly
+  public void autoComplete() {
+    int completed = activityService.autoCompleteStartedActivities();
+    if (completed > 0) {
+      log.info("Auto-completed {} activities", completed);
     }
+  }
 }

@@ -2,7 +2,8 @@
 
 This file is the project's committed home for project-intrinsic agent knowledge: build, test, release, architecture, and sharp-edge notes that should travel with the code.
 
-- See `README.md` for the authoritative build, verification, production SPA packaging, and routing contract.
+- See `README.md` for the authoritative build, formatting, verification, production SPA packaging, and routing contract.
+- Formatting is enforced in CI: `./gradlew spotlessApply|spotlessCheck` (backend) and `npm run format|format:check` (frontend). Keep mechanical reformats in their own commits.
 - Authentication intent is explicit: `/api/auth/request-code` is enumeration-safe sign-in, while `/api/auth/signup/request-code` validates the invite independently of account existence. Preserve this split; see `AuthService` and `AuthIntegrationTest`.
 - Auth-code replacement in `AuthCodeService` intentionally uses `PostgresAuthTokenIssuanceLock` plus the partial unique index as the final invariant; see `AuthConcurrencyIntegrationTest`.
 

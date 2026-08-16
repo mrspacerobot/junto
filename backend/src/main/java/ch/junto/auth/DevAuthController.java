@@ -16,39 +16,43 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Dev-only endpoint to log in as any existing user by email.
- * Only active when the "dev" profile is set.
+ * Dev-only endpoint to log in as any existing user by email. Only active when the "dev" profile is
+ * set.
  */
 @RestController
 @RequestMapping("/api/auth")
 @Profile("dev")
 public class DevAuthController {
 
-    private final UserService userService;
-    private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
+  private final UserService userService;
+  private final SecurityContextRepository securityContextRepository =
+      new HttpSessionSecurityContextRepository();
 
-    public DevAuthController(UserService userService) {
-        this.userService = userService;
+  public DevAuthController(UserService userService) {
+    this.userService = userService;
+  }
+
+  public record DevLoginRequest(@NotBlank String email) {}
+
+  @PostMapping("/dev-login")
+  public void devLogin(
+      @RequestBody @Valid DevLoginRequest body,
+      HttpServletRequest servletRequest,
+      HttpServletResponse response) {
+    String email = body.email().trim().toLowerCase();
+    User user = userService.findByEmail(email).orElseGet(() -> userService.createFromEmail(email));
+    if (!user.isOnboarded()) {
+      user = userService.completeOnboarding(user.getId(), email.substring(0, email.indexOf('@')));
     }
 
-    public record DevLoginRequest(@NotBlank String email) {}
-
-    @PostMapping("/dev-login")
-    public void devLogin(@RequestBody @Valid DevLoginRequest body, HttpServletRequest servletRequest, HttpServletResponse response) {
-        String email = body.email().trim().toLowerCase();
-        User user = userService.findByEmail(email)
-            .orElseGet(() -> userService.createFromEmail(email));
-        if (!user.isOnboarded()) {
-            user = userService.completeOnboarding(user.getId(), email.substring(0, email.indexOf('@')));
-        }
-
-        servletRequest.getSession(true);
-        servletRequest.changeSessionId();
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
+    servletRequest.getSession(true);
+    servletRequest.changeSessionId();
+    Authentication authentication =
+        new UsernamePasswordAuthenticationToken(
             new SessionPrincipal(user.getId()), null, java.util.List.of());
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(authentication);
-        SecurityContextHolder.setContext(context);
-        securityContextRepository.saveContext(context, servletRequest, response);
-    }
+    SecurityContext context = SecurityContextHolder.createEmptyContext();
+    context.setAuthentication(authentication);
+    SecurityContextHolder.setContext(context);
+    securityContextRepository.saveContext(context, servletRequest, response);
+  }
 }

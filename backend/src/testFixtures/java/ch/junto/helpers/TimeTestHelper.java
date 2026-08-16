@@ -5,17 +5,17 @@ import java.time.ZoneOffset;
 
 public final class TimeTestHelper {
 
-    private TimeTestHelper() {}
+  private TimeTestHelper() {}
 
-    public static OffsetDateTime now() {
-        return OffsetDateTime.now(ZoneOffset.UTC);
-    }
+  public static OffsetDateTime now() {
+    return OffsetDateTime.now(ZoneOffset.UTC);
+  }
 
-    public static OffsetDateTime hoursFromNow(int hours) {
-        return now().plusHours(hours);
-    }
+  public static OffsetDateTime hoursFromNow(int hours) {
+    return now().plusHours(hours);
+  }
 
-    public static OffsetDateTime hoursAgo(int hours) {
-        return now().minusHours(hours);
-    }
+  public static OffsetDateTime hoursAgo(int hours) {
+    return now().minusHours(hours);
+  }
 }

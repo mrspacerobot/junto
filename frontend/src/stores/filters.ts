@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { defineStore } from 'pinia';
 
 export const useFiltersStore = defineStore('filters', {
   state: () => ({
@@ -6,24 +6,24 @@ export const useFiltersStore = defineStore('filters', {
     city: '',
     fromDate: '' as string | null,
     toDate: '' as string | null,
-    joinable: false
+    joinable: false,
   }),
   actions: {
     setActivityType(slug: string | null) {
-      this.typeSlug = slug
+      this.typeSlug = slug;
     },
     setCity(city: string) {
-      this.city = city
+      this.city = city;
     },
     setFromDate(date: string | null) {
-      this.fromDate = date
+      this.fromDate = date;
     },
     reset() {
-      this.typeSlug = null
-      this.city = ''
-      this.fromDate = null
-      this.toDate = null
-      this.joinable = false
-    }
-  }
-})
+      this.typeSlug = null;
+      this.city = '';
+      this.fromDate = null;
+      this.toDate = null;
+      this.joinable = false;
+    },
+  },
+});

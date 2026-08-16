@@ -4,7 +4,7 @@
     :class="[
       'inline-flex items-center',
       iconOnly ? '' : 'gap-[10px]',
-      tag === 'a' ? 'no-underline' : ''
+      tag === 'a' ? 'no-underline' : '',
     ]"
     v-bind="tag === 'a' ? { href: '/' } : {}"
   >
@@ -23,32 +23,32 @@
     </svg>
 
     <!-- Wordmark -->
-    <span
-      v-if="!iconOnly"
-      :style="wordmarkStyle"
-    >junto</span>
+    <span v-if="!iconOnly" :style="wordmarkStyle">junto</span>
   </component>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed } from 'vue';
 
-const props = withDefaults(defineProps<{
-  size?: number
-  dark?: boolean
-  iconOnly?: boolean
-  tag?: string
-}>(), {
-  size: 1,
-  dark: false,
-  iconOnly: false,
-  tag: 'span',
-})
+const props = withDefaults(
+  defineProps<{
+    size?: number;
+    dark?: boolean;
+    iconOnly?: boolean;
+    tag?: string;
+  }>(),
+  {
+    size: 1,
+    dark: false,
+    iconOnly: false,
+    tag: 'span',
+  },
+);
 
-const color = computed(() => props.dark ? '#ffffff' : 'currentColor')
+const color = computed(() => (props.dark ? '#ffffff' : 'currentColor'));
 
-const iconSize = computed(() => Math.round(24 * props.size))
-const fontSize = computed(() => Math.round(30 * props.size))
+const iconSize = computed(() => Math.round(24 * props.size));
+const fontSize = computed(() => Math.round(30 * props.size));
 
 const wordmarkStyle = computed(() => ({
   fontFamily: "'Playfair Display', serif",
@@ -58,5 +58,5 @@ const wordmarkStyle = computed(() => ({
   color: color.value,
   letterSpacing: '-0.03em',
   lineHeight: 1,
-}))
+}));
 </script>

@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import Sidebar from './Sidebar.vue'
-import TopNav from './TopNav.vue'
-import MobileNavBar from './MobileNavBar.vue'
+import Sidebar from './Sidebar.vue';
+import TopNav from './TopNav.vue';
+import MobileNavBar from './MobileNavBar.vue';
 </script>

@@ -16,76 +16,80 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
-
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private final AuthService authService;
-    private final AuthRateLimiter authRateLimiter;
-    private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
+  private final AuthService authService;
+  private final AuthRateLimiter authRateLimiter;
+  private final SecurityContextRepository securityContextRepository =
+      new HttpSessionSecurityContextRepository();
 
-    public AuthController(AuthService authService, AuthRateLimiter authRateLimiter) {
-        this.authService = authService;
-        this.authRateLimiter = authRateLimiter;
-    }
+  public AuthController(AuthService authService, AuthRateLimiter authRateLimiter) {
+    this.authService = authService;
+    this.authRateLimiter = authRateLimiter;
+  }
 
-    public record RequestCodeRequest(@NotBlank @Email String email) {}
-    public record RequestSignupCodeRequest(@NotBlank @Email String email, String inviteCode) {}
-    public record VerifyCodeRequest(
-        @NotBlank @Email String email,
-        @NotBlank @Pattern(regexp = "\\d{6}") String code
-    ) {}
-    public record VerifyTokenRequest(@NotBlank String token) {}
+  public record RequestCodeRequest(@NotBlank @Email String email) {}
 
-    @PostMapping("/request-code")
-    public void requestCode(
-        @RequestBody @Valid RequestCodeRequest request,
-        HttpServletRequest servletRequest
-    ) {
-        authRateLimiter.checkCodeRequest(request.email(), servletRequest.getRemoteAddr());
-        authService.requestSignInCode(request.email());
-    }
+  public record RequestSignupCodeRequest(@NotBlank @Email String email, String inviteCode) {}
 
-    @PostMapping("/signup/request-code")
-    public void requestSignupCode(
-        @RequestBody @Valid RequestSignupCodeRequest request,
-        HttpServletRequest servletRequest
-    ) {
-        authRateLimiter.checkCodeRequest(request.email(), servletRequest.getRemoteAddr());
-        authService.requestSignupCode(request.email(), request.inviteCode());
-    }
+  public record VerifyCodeRequest(
+      @NotBlank @Email String email, @NotBlank @Pattern(regexp = "\\d{6}") String code) {}
 
-    @PostMapping("/verify")
-    public void verify(@RequestBody @Valid VerifyCodeRequest request, HttpServletRequest servletRequest, HttpServletResponse response) {
-        authRateLimiter.checkCodeVerification(request.email(), servletRequest.getRemoteAddr());
-        User user = authService.verifyCode(request.email(), request.code());
-        authenticateUser(user, servletRequest, response);
-    }
+  public record VerifyTokenRequest(@NotBlank String token) {}
 
-    @PostMapping("/verify-token")
-    public void verifyToken(@RequestBody @Valid VerifyTokenRequest request, HttpServletRequest servletRequest, HttpServletResponse response) {
-        authRateLimiter.checkTokenVerification(request.token(), servletRequest.getRemoteAddr());
-        User user = authService.verifyToken(request.token());
-        authenticateUser(user, servletRequest, response);
-        // Redirect to frontend or home? For now just authenticate.
-        // Usually, magic links redirect to a "logged in" page.
-    }
+  @PostMapping("/request-code")
+  public void requestCode(
+      @RequestBody @Valid RequestCodeRequest request, HttpServletRequest servletRequest) {
+    authRateLimiter.checkCodeRequest(request.email(), servletRequest.getRemoteAddr());
+    authService.requestSignInCode(request.email());
+  }
 
-    @GetMapping("/me")
-    public MeResponse me(@CurrentUser User user) {
-        return MeResponse.from(authService.refreshUser(user.getId()));
-    }
+  @PostMapping("/signup/request-code")
+  public void requestSignupCode(
+      @RequestBody @Valid RequestSignupCodeRequest request, HttpServletRequest servletRequest) {
+    authRateLimiter.checkCodeRequest(request.email(), servletRequest.getRemoteAddr());
+    authService.requestSignupCode(request.email(), request.inviteCode());
+  }
 
-    private void authenticateUser(User user, HttpServletRequest request, HttpServletResponse response) {
-        request.getSession(true);
-        request.changeSessionId();
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
+  @PostMapping("/verify")
+  public void verify(
+      @RequestBody @Valid VerifyCodeRequest request,
+      HttpServletRequest servletRequest,
+      HttpServletResponse response) {
+    authRateLimiter.checkCodeVerification(request.email(), servletRequest.getRemoteAddr());
+    User user = authService.verifyCode(request.email(), request.code());
+    authenticateUser(user, servletRequest, response);
+  }
+
+  @PostMapping("/verify-token")
+  public void verifyToken(
+      @RequestBody @Valid VerifyTokenRequest request,
+      HttpServletRequest servletRequest,
+      HttpServletResponse response) {
+    authRateLimiter.checkTokenVerification(request.token(), servletRequest.getRemoteAddr());
+    User user = authService.verifyToken(request.token());
+    authenticateUser(user, servletRequest, response);
+    // Redirect to frontend or home? For now just authenticate.
+    // Usually, magic links redirect to a "logged in" page.
+  }
+
+  @GetMapping("/me")
+  public MeResponse me(@CurrentUser User user) {
+    return MeResponse.from(authService.refreshUser(user.getId()));
+  }
+
+  private void authenticateUser(
+      User user, HttpServletRequest request, HttpServletResponse response) {
+    request.getSession(true);
+    request.changeSessionId();
+    Authentication authentication =
+        new UsernamePasswordAuthenticationToken(
             new SessionPrincipal(user.getId()), null, java.util.List.of());
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(authentication);
-        SecurityContextHolder.setContext(context);
-        securityContextRepository.saveContext(context, request, response);
-    }
+    SecurityContext context = SecurityContextHolder.createEmptyContext();
+    context.setAuthentication(authentication);
+    SecurityContextHolder.setContext(context);
+    securityContextRepository.saveContext(context, request, response);
+  }
 }

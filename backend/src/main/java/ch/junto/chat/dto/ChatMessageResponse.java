@@ -12,5 +12,4 @@ public record ChatMessageResponse(
     String avatarUrl,
     String content,
     MessageType type,
-    OffsetDateTime createdAt
-) {}
+    OffsetDateTime createdAt) {}

@@ -8,7 +8,9 @@
             <div class="w-24 h-24 rounded-2xl bg-white p-1 shadow-lg">
               <div class="w-full h-full bg-slate-200 rounded-xl"></div>
             </div>
-            <button class="px-6 py-2 border border-slate-200 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all">
+            <button
+              class="px-6 py-2 border border-slate-200 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all"
+            >
               Edit Profile
             </button>
           </div>
@@ -32,7 +34,9 @@
 
         <div class="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
           <h3 class="text-lg font-bold text-rose-600 mb-2">Danger Zone</h3>
-          <p class="text-sm text-slate-500 mb-6">Permanently delete your account and all associated data.</p>
+          <p class="text-sm text-slate-500 mb-6">
+            Permanently delete your account and all associated data.
+          </p>
 
           <button
             @click="confirmDelete = true"
@@ -45,11 +49,15 @@
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="confirmDelete" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+    <div
+      v-if="confirmDelete"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+    >
       <div class="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
         <h3 class="text-xl font-bold text-slate-900 mb-2">Are you absolutely sure?</h3>
         <p class="text-slate-500 mb-8 leading-relaxed">
-          This action cannot be undone. This will permanently delete your account and remove your data from our servers.
+          This action cannot be undone. This will permanently delete your account and remove your
+          data from our servers.
         </p>
         <div class="flex gap-4">
           <button
