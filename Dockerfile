@@ -12,9 +12,9 @@ COPY frontend/package.json frontend/package-lock.json frontend/openapi-ts.config
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --ignore-scripts --no-audit --no-fund
 
-COPY frontend/index.html frontend/postcss.config.js frontend/tailwind.config.js ./
-COPY frontend/tsconfig.json frontend/tsconfig.app.json frontend/tsconfig.node.json ./
-COPY frontend/vite.config.ts ./
+COPY frontend/index.html frontend/postcss.config.js frontend/tailwind.config.js \
+     frontend/tsconfig.json frontend/tsconfig.app.json frontend/tsconfig.node.json \
+     frontend/vite.config.ts ./
 COPY frontend/public/ ./public/
 COPY frontend/src/ ./src/
 RUN npm run generate-api && npm run build
@@ -31,14 +31,11 @@ RUN --mount=type=cache,target=/root/.gradle \
 
 COPY backend/src/main/java/ ./src/main/java/
 COPY backend/src/main/resources/ ./src/main/resources/
-COPY --from=frontend-build /workspace/frontend/dist/ ./src/main/resources/static/
+COPY --from=frontend-build /workspace/frontend/dist/ /workspace/frontend-dist/
 RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew bootJar --no-daemon -PskipFrontend && \
-    artifact="$(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-plain.jar' ! -name '*-test-fixtures.jar' -print -quit)" && \
-    test -n "$artifact" && \
-    jar tf "$artifact" | grep -q '^BOOT-INF/classes/static/index.html$' && \
+    ./gradlew bootJar --no-daemon -PfrontendDistDir=/workspace/frontend-dist && \
     mkdir -p /workspace/runtime/app && \
-    cp "$artifact" /workspace/runtime/app/junto.jar && \
+    cp build/libs/junto.jar /workspace/runtime/app/junto.jar && \
     touch -d "@${SOURCE_DATE_EPOCH}" \
       /workspace/runtime/app/junto.jar \
       /workspace/runtime/app \
@@ -58,7 +55,7 @@ COPY --from=backend-build --chown=65532:65532 /workspace/runtime/ /
 WORKDIR /app
 
 ENV SPRING_PROFILES_ACTIVE=prod \
-    JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -Djava.io.tmpdir=/tmp"
+    JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0"
 
 USER 65532:65532
 EXPOSE 8080

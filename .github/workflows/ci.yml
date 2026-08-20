@@ -113,10 +113,16 @@ jobs:
       - name: Verify the effective production context allowlist
         run: ./scripts/test-docker-context.sh
 
-      - name: Build the same-platform production artifact reproducibly twice
+      - name: Build the production artifact, asserting reproducibility on master and pull requests
+        env:
+          ASSERT_REPRODUCIBLE: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/master' }}
         run: |
           source_date_epoch="$(git show -s --format=%ct HEAD)"
-          ./scripts/verify-image-reproducibility.sh junto:ci linux/amd64 "$source_date_epoch"
+          arguments=(junto:ci linux/amd64 "$source_date_epoch")
+          if [ "$ASSERT_REPRODUCIBLE" = true ]; then
+            arguments+=(--assert-reproducible)
+          fi
+          ./scripts/build-production-image.sh "${arguments[@]}"
 
       - name: Verify image contents, startup, and graceful shutdown
         run: ./scripts/verify-image.sh junto:ci

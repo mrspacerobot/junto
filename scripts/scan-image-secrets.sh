@@ -2,6 +2,7 @@
 set -euo pipefail
 
 image="${1:-junto:local}"
+credential_name='(DATABASE_URL|RESEND_API_KEY|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|[[:alnum:]_]*(PASSWORD|PASSWD|SECRET|TOKEN|PRIVATE_KEY|ACCESS_KEY)[[:alnum:]_]*)'
 scanner_image="aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c"
 tmpdir="$(mktemp -d)"
 container_id=""
@@ -22,6 +23,17 @@ fail() {
 command -v docker >/dev/null || fail "docker is required"
 command -v unzip >/dev/null || fail "unzip is required"
 docker image inspect "$image" >/dev/null 2>&1 || fail "image not found: $image"
+
+# Metadata first: Trivy scans layer content, not the credential-shaped variable
+# names and ARG/ENV assignments that Docker records in config and history.
+environment="$(docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$image")"
+if printf '%s\n' "$environment" | grep -Eiq "^${credential_name}="; then
+  fail "credential-shaped environment metadata is present"
+fi
+if docker history --no-trunc --format '{{.CreatedBy}}' "$image" |
+  grep -Eiq "(^|[[:space:]|])${credential_name}=[^[:space:]]"; then
+  fail "credential-shaped ARG/ENV assignment is present in image history"
+fi
 
 docker image save --output "$tmpdir/image.tar" "$image"
 docker run --rm \
@@ -58,4 +70,4 @@ docker run --rm \
 
 docker rm "$container_id" >/dev/null
 container_id=""
-printf 'verified image secrets: pinned layer scan and nested /app/junto.jar scan found no secret material\n'
+printf 'verified image secrets: no credential-shaped metadata; pinned layer scan and nested /app/junto.jar scan found no secret material\n'

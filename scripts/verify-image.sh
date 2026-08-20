@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 image="${1:-junto:local}"
 postgis_image="postgis/postgis:16-3.4-alpine@sha256:681931a625df344215e9b8998bf34daf146b6a395ceacee4439eb9c85869239f"
 suffix="$$"
@@ -43,7 +42,6 @@ entrypoint="$(docker image inspect --format '{{json .Config.Entrypoint}}' "$imag
 environment="$(docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$image")"
 printf '%s\n' "$environment" | grep -qx 'SPRING_PROFILES_ACTIVE=prod' || \
   fail "production Spring profile is not the image default"
-"$script_dir/verify-credential-metadata.sh" "$image"
 
 container_id="$(docker create "$image")"
 docker cp "${container_id}:/app/junto.jar" "$tmpdir/junto.jar"

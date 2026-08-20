@@ -122,18 +122,9 @@ tasks.named('test') {
 }
 
 tasks.named('bootJar') {
+    archiveFileName = 'junto.jar'
     preserveFileTimestamps = false
     reproducibleFileOrder = true
-}
-
-// When building inside Docker, front-end assets arrive from a separate build
-// stage; skip the Spring Boot auto-frontend tasks that require npm on PATH.
-if (project.hasProperty('skipFrontend')) {
-    tasks.configureEach {
-        if (name.startsWith('frontend') || name == 'syncFrontend') {
-            enabled = false
-        }
-    }
 }
 
 openApi {

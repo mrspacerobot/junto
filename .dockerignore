@@ -1,53 +1,35 @@
-# Send only production build inputs. This allowlist keeps VCS metadata, local
-# environment/secrets, dependencies, build output, tests, and tooling state out
-# of every Docker build stage.
+# Send only production build inputs. Everything is excluded by default; each
+# line below re-includes exactly one production input. Dependencies, build
+# output, tests, VCS metadata, and local secrets can never enter the context.
 **
 
 !Dockerfile
-
-!docs/
-docs/**
 !docs/openapi.json
 
-!frontend/
-frontend/**
 !frontend/package.json
 !frontend/package-lock.json
-!frontend/openapi-ts.config.ts
 !frontend/index.html
+!frontend/openapi-ts.config.ts
 !frontend/postcss.config.js
 !frontend/tailwind.config.js
-!frontend/tsconfig.json
-!frontend/tsconfig.app.json
-!frontend/tsconfig.node.json
 !frontend/vite.config.ts
-!frontend/public/
+!frontend/tsconfig*.json
 !frontend/public/**
-!frontend/src/
 !frontend/src/**
-frontend/src/**/*.spec.*
-frontend/src/**/*.test.*
 
-!backend/
-backend/**
 !backend/build.gradle
 !backend/settings.gradle
 !backend/gradlew
-!backend/gradle/
 !backend/gradle/**
-!backend/src/
-backend/src/**
-!backend/src/main/
 !backend/src/main/**
 
-# Main-source profile fixtures are useful to local development and tests, but
-# are not production runtime inputs.
+# Re-exclusions that must win over the allowlist above: tests, non-production
+# Spring profile fixtures and migrations, and local dotenv credentials.
+**/*.spec.*
+**/*.test.*
 backend/src/main/resources/application-dev.yml
 backend/src/main/resources/application-openapi.yml
 backend/src/main/resources/application-test.yml
 backend/src/main/resources/db/migration-dev/
-
-# Local dotenv credentials stay excluded even if created inside an allowed
-# production source directory.
 **/.env
 **/.env.*

@@ -130,10 +130,11 @@ docker build --pull \
 ./scripts/scan-image-secrets.sh junto:local
 ```
 
-CI additionally builds twice without cache for one fixed platform and compares
-the runtime platform manifests. Provenance is disabled only for that equality
-check because per-build attestations can legitimately change the outer image
-index.
+On master and on pull requests, CI additionally builds twice without cache for
+one fixed platform and compares the runtime platform manifests, then hands that
+verified artifact to the remaining checks. Provenance is disabled for the
+equality check because per-build attestations can legitimately change the outer
+image index. Branch pushes build once and skip only the comparison.
 
 The image serves the compiled Vue application and Spring Boot API together on
 port 8080 and activates the `prod` profile by default. It needs an external

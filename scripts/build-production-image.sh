@@ -3,9 +3,10 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repository_root="$(cd "$script_dir/.." && pwd)"
-image="${1:-junto:reproducible}"
+image="${1:-junto:local}"
 platform="${2:-linux/amd64}"
 source_date_epoch="${3:-$(git -C "$repository_root" show -s --format=%ct HEAD)}"
+assert_reproducible=false
 tmpdir="$(mktemp -d)"
 
 cleanup() {
@@ -14,9 +15,16 @@ cleanup() {
 trap cleanup EXIT
 
 fail() {
-  printf 'image reproducibility verification failed: %s\n' "$*" >&2
+  printf 'production image build failed: %s\n' "$*" >&2
   exit 1
 }
+
+for option in "${@:4}"; do
+  case "$option" in
+    --assert-reproducible) assert_reproducible=true ;;
+    *) fail "unknown option: $option" ;;
+  esac
+done
 
 command -v docker >/dev/null || fail "docker is required"
 command -v python3 >/dev/null || fail "python3 is required"
@@ -64,22 +72,27 @@ PY
 }
 
 build_oci_archive "$tmpdir/first.tar"
-build_oci_archive "$tmpdir/second.tar"
-first_digest="$(platform_manifest_digest "$tmpdir/first.tar")"
-second_digest="$(platform_manifest_digest "$tmpdir/second.tar")"
-[ "$first_digest" = "$second_digest" ] || \
-  fail "same-commit platform manifests differ: $first_digest != $second_digest"
+digest="$(platform_manifest_digest "$tmpdir/first.tar")"
 
-# Load the production image for runtime checks via a separate cache-enabled
-# build. The OCI archives above are the reproducibility contract; this build
-# just makes the image available to docker for inspection and smoke tests.
-docker buildx build \
-  --platform "$platform" \
-  --provenance=false \
-  --build-arg "SOURCE_DATE_EPOCH=$source_date_epoch" \
-  --tag "$image" \
-  --load \
-  "$repository_root"
+# The reproducibility assertion doubles the cost of this job, so it runs where a
+# regression must be caught: on master and on pull requests.
+if [ "$assert_reproducible" = true ]; then
+  build_oci_archive "$tmpdir/second.tar"
+  second_digest="$(platform_manifest_digest "$tmpdir/second.tar")"
+  [ "$digest" = "$second_digest" ] || \
+    fail "same-commit platform manifests differ: $digest != $second_digest"
+fi
+
+# Hand the built artifact itself to the later inspection and smoke steps, rather
+# than rebuilding. When the assertion ran, the image they check is one of the two
+# builds whose digests were just compared.
+docker load --input "$tmpdir/first.tar" >/dev/null
 docker image inspect "$image" >/dev/null 2>&1 || fail "production image was not loaded as $image"
-printf 'verified image reproducibility: two clean %s builds at epoch %s produced platform manifest %s\n' \
-  "$platform" "$source_date_epoch" "$first_digest"
+
+if [ "$assert_reproducible" = true ]; then
+  printf 'built and verified reproducible: two clean %s builds at epoch %s produced platform manifest %s\n' \
+    "$platform" "$source_date_epoch" "$digest"
+else
+  printf 'built production image: one clean %s build at epoch %s produced platform manifest %s\n' \
+    "$platform" "$source_date_epoch" "$digest"
+fi

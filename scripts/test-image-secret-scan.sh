@@ -80,7 +80,7 @@ grep -q '/audit-private-key.pem' "$tmpdir/result.log" || {
   fail "layer scan failure did not identify the deleted private-key canary"
 }
 
-if "$repository_root/scripts/verify-credential-metadata.sh" "$history_image" >"$tmpdir/result.log" 2>&1; then
+if "$repository_root/scripts/scan-image-secrets.sh" "$history_image" >"$tmpdir/result.log" 2>&1; then
   fail "credential-bearing ARG history canary was accepted"
 fi
 grep -q 'credential-shaped ARG/ENV assignment is present in image history' "$tmpdir/result.log" || {

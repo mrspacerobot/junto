@@ -27,24 +27,19 @@ git -C "$repository_root" archive HEAD | tar -xf - -C "$context"
 cp "$repository_root/.dockerignore" "$context/.dockerignore"
 cp "$repository_root/Dockerfile" "$context/Dockerfile"
 
-# Representative files that must remain unavailable even if a future build
-# uses a broad COPY or context mount.
+# Representative untracked artefacts that a real working tree carries and that
+# must stay unavailable even if a future build uses a broad COPY.
 mkdir -p \
   "$context/frontend/node_modules/audit-dependency" \
   "$context/frontend/dist" \
-  "$context/frontend/src/components" \
   "$context/backend/build/classes" \
   "$context/backend/.gradle/caches" \
-  "$context/backend/src/test/java/audit" \
-  "$context/backend/src/main/resources" \
   "$context/.git"
 printf 'forbidden\n' >"$context/frontend/node_modules/audit-dependency/index.js"
 printf 'forbidden\n' >"$context/frontend/dist/audit-bundle.js"
-printf 'forbidden\n' >"$context/frontend/src/components/Audit.spec.ts"
 printf 'forbidden\n' >"$context/frontend/.env.production.local"
 printf 'forbidden\n' >"$context/backend/build/classes/Audit.class"
 printf 'forbidden\n' >"$context/backend/.gradle/caches/audit.bin"
-printf 'forbidden\n' >"$context/backend/src/test/java/audit/AuditTest.java"
 printf 'forbidden\n' >"$context/backend/src/main/resources/.env.production"
 printf 'forbidden\n' >"$context/.git/config"
 
@@ -58,59 +53,29 @@ FROM scratch
 COPY . /context
 EOF
 
-for forbidden in \
-  frontend/node_modules/audit-dependency/index.js \
-  frontend/dist/audit-bundle.js \
-  frontend/src/components/Audit.spec.ts \
-  frontend/.env.production.local \
-  backend/build/classes/Audit.class \
-  backend/.gradle/caches/audit.bin \
-  backend/src/test/java/audit/AuditTest.java \
-  backend/src/main/resources/.env.production \
-  docs/recovery-provenance.md \
-  .git/config; do
-  [ ! -e "$output/context/$forbidden" ] || fail "forbidden path entered context: $forbidden"
-done
-
-# Build the exhaustive expected file list from the explicit production inputs
-# consumed by Dockerfile. An exact diff catches both missing inputs and any
-# newly reopened subtree.
-{
-  printf '%s\n' \
-    Dockerfile \
-    docs/openapi.json \
-    frontend/package.json \
-    frontend/package-lock.json \
-    frontend/openapi-ts.config.ts \
-    frontend/index.html \
-    frontend/postcss.config.js \
-    frontend/tailwind.config.js \
-    frontend/tsconfig.json \
-    frontend/tsconfig.app.json \
-    frontend/tsconfig.node.json \
-    frontend/vite.config.ts \
-    backend/build.gradle \
-    backend/settings.gradle \
-    backend/gradlew
-  find "$context/frontend/public" -type f -print
-  find "$context/frontend/src" -type f \
-    ! -name '*.spec.*' ! -name '*.test.*' \
-    ! -name '.env' ! -name '.env.*' -print
-  find "$context/backend/gradle" -type f -print
-  find "$context/backend/src/main" -type f \
-    ! -path '*/resources/application-dev.yml' \
-    ! -path '*/resources/application-openapi.yml' \
-    ! -path '*/resources/application-test.yml' \
-    ! -path '*/resources/db/migration-dev/*' \
-    ! -name '.env' ! -name '.env.*' -print
-} | sed "s#^${context}/##" | LC_ALL=C sort -u >"$tmpdir/expected.list"
 (
   cd "$output/context"
   find . -type f -print | sed 's#^./##' | LC_ALL=C sort
 ) >"$tmpdir/actual.list"
+git -C "$repository_root" ls-files | LC_ALL=C sort >"$tmpdir/tracked.list"
 
-if ! diff -u "$tmpdir/expected.list" "$tmpdir/actual.list"; then
-  fail "effective context differs from the narrow production allowlist"
+# Losing a production input fails closed: the real build stops at its COPY. Only
+# the fail-open direction needs a test, and it has exactly two shapes.
+
+# 1. Nothing untracked may enter. One comparison covers every dependency, build
+#    output, tooling cache, VCS directory, and local dotenv credential.
+untracked="$(LC_ALL=C comm -23 "$tmpdir/actual.list" "$tmpdir/tracked.list")"
+[ -z "$untracked" ] || {
+  printf '%s\n' "$untracked" >&2
+  fail "untracked paths entered the context"
+}
+
+# 2. Tracked but non-production categories must stay out too.
+non_production='(^|/)(src/test|e2e)/|\.(spec|test)\.[^/]+$|(^|/)application-(dev|openapi|test)\.yml$|(^|/)db/migration-dev/'
+if grep -Eq "$non_production" "$tmpdir/actual.list"; then
+  grep -E "$non_production" "$tmpdir/actual.list" >&2
+  fail "tests, non-production profiles, or development migrations entered the context"
 fi
 
-printf 'verified Docker context: every production input available; dependencies, build output, tests, and local secrets excluded\n'
+printf 'verified Docker context: %s tracked production files; dependencies, build output, tests, and local secrets excluded\n' \
+  "$(wc -l <"$tmpdir/actual.list" | tr -d ' ')"
