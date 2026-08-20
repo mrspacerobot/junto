@@ -65,6 +65,42 @@ application previously accepted a credential-bearing Render `DATABASE_URL` and
 parsed it in Java; that adapter is intentionally removed. `DATABASE_URL` is no
 longer read by the production profile.
 
+## Production runtime behind the provider proxy
+
+Render terminates TLS and forwards plain HTTP to the container, so the runtime
+contract is declared in `backend/src/main/resources/application.yml` and
+`application-prod.yml` rather than in code.
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| `server.port` | `${PORT:8080}` | Render injects `PORT`; 8080 is the local default |
+| `server.address` | `0.0.0.0` | The provider health check and router reach the container over its network interface |
+| `server.shutdown` | `graceful` | Drain in-flight requests on SIGTERM |
+| `spring.lifecycle.timeout-per-shutdown-phase` | `20s` (prod) | Render sends SIGKILL 30s after SIGTERM; finish first |
+| `server.forward-headers-strategy` | `native` (prod only) | Trust `X-Forwarded-*` at the provider boundary and nowhere else |
+| `server.servlet.session.cookie.name` | `SESSION` | Spring Session's cookie; this app never issues `JSESSIONID` |
+| `server.servlet.session.cookie.http-only` / `same-site` | `true` / `lax` | Applied in every profile |
+| `server.servlet.session.cookie.secure` | `true` (prod only) | Unconditional, not inferred from the request scheme |
+
+Forwarded headers are user-supplied input everywhere except behind a proxy that
+rewrites them, so only the `prod` profile trusts them. `native` installs Tomcat's
+`RemoteIpValve`, which resolves the client address by walking `X-Forwarded-For`
+from the right and discarding trusted proxies. A client-supplied value therefore
+only ever becomes a left-hand prefix that the valve ignores; `framework`
+(`ForwardedHeaderFilter`) would take the leftmost entry instead and is spoofable.
+Auth source rate limits in `AuthRateLimiter` read that resolved address, so the
+distinction is a security boundary, not a formatting detail.
+
+The trusted set is Tomcat's default private-range `internal-proxies`, which covers
+Render's internal network. If a provider fronts the container from a public
+address, override `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES` with that address
+instead of widening the trust to everything.
+
+`ProductionRuntimeConfigurationTest` asserts the declared values, and
+`TrustedProxyForwardingIntegrationTest` / `UntrustedForwardedHeaderIntegrationTest`
+assert the behavior on both sides of the boundary against a real servlet container.
+`MockMvc` cannot cover this: forwarded-header handling is an engine valve.
+
 ## Formatting
 
 Java uses Google Java Style through Spotless with a pinned `google-java-format`;

@@ -21,6 +21,10 @@ public class SecurityConfig {
   @Value("${app.security.csrf.enabled:true}")
   private boolean csrfEnabled;
 
+  /** Spring Session issues this cookie; logout must delete it and not a servlet JSESSIONID. */
+  @Value("${server.servlet.session.cookie.name}")
+  private String sessionCookieName;
+
   @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
     if (csrfEnabled) {
@@ -80,7 +84,7 @@ public class SecurityConfig {
                     .logoutUrl("/api/auth/logout")
                     .logoutSuccessHandler(
                         new HttpStatusReturningLogoutSuccessHandler(HttpStatus.OK))
-                    .deleteCookies("JSESSIONID"));
+                    .deleteCookies(sessionCookieName));
 
     return http.build();
   }
