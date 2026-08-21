@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import path from 'path';
 
+const backendUrl = `http://localhost:${process.env.E2E_BACKEND_PORT ?? 8080}`;
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
@@ -13,15 +15,15 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: backendUrl,
         changeOrigin: true,
       },
       '/v3': {
-        target: 'http://localhost:8080',
+        target: backendUrl,
         changeOrigin: true,
       },
       '/ws': {
-        target: 'http://localhost:8080',
+        target: backendUrl,
         changeOrigin: true,
         ws: true,
       },

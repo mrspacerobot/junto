@@ -1,8 +1,12 @@
 name: CI
 
+# A branch that also has an open pull request would otherwise match both
+# triggers and run every job twice. Branch pushes are covered by the pull
+# request that proposes them; master pushes are what the release workflow waits
+# on.
 on:
   push:
-    branches: [master, 'feat/**', 'fm/**']
+    branches: [master]
   pull_request:
     branches: [master]
 
@@ -55,6 +59,17 @@ jobs:
           OPENAPI_DATABASE_USER: junto
           OPENAPI_DATABASE_PASSWORD: junto
         run: ./gradlew generateOpenApiDocs --no-daemon
+
+      - name: Record the release identity of this commit
+        working-directory: backend
+        run: ./gradlew -q releaseMetadata --no-daemon --console=plain | grep -m1 '^{' > "$RUNNER_TEMP/release-metadata.json"
+
+      - name: Verify the packaged artifact is releasable
+        run: |
+          artifact="$(find backend/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-plain.jar' ! -name '*-test-fixtures.jar' -print -quit)"
+          test -n "$artifact"
+          ./scripts/verify-release-artifact.sh "$artifact" "$RUNNER_TEMP/release-metadata.json"
+          ./scripts/test-release-artifact-verification.sh "$artifact" "$RUNNER_TEMP/release-metadata.json"
 
       - name: Archive generated OpenAPI contract
         uses: actions/upload-artifact@v4
