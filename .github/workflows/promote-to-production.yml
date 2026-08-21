@@ -37,6 +37,7 @@ env:
 
 jobs:
   promote:
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
@@ -125,7 +126,7 @@ jobs:
             exit 1
           }
           release_tag="v${version}-${CANDIDATE_COMMIT:0:7}"
-          release="$(gh release view "$release_tag" --json targetCommitish,isPrerelease)" || {
+          release="$(gh release view "$release_tag" --json body,isDraft,targetCommitish)" || {
             echo "No candidate release record exists at $release_tag." >&2
             exit 1
           }
@@ -133,11 +134,21 @@ jobs:
             echo "Release $release_tag does not target $CANDIDATE_COMMIT." >&2
             exit 1
           }
-          [ "$(echo "$release" | jq -r .isPrerelease)" = true ] || {
-            echo "Release $release_tag is not awaiting promotion." >&2
+          [ "$(echo "$release" | jq -r .isDraft)" = false ] || {
+            echo "Release $release_tag is still a draft." >&2
+            exit 1
+          }
+          recorded_digest="$(echo "$release" | jq -r 'try (.body | capture("(?m)^\\| Image digest \\| `(?<digest>sha256:[0-9a-f]{64})` \\|$").digest) catch ""')"
+          [ -n "$recorded_digest" ] || {
+            echo "Release $release_tag has no valid recorded image digest." >&2
+            exit 1
+          }
+          [ "$recorded_digest" = "${{ steps.candidate.outputs.digest }}" ] || {
+            echo "Commit tag ${{ steps.candidate.outputs.tag }} resolves to '${{ steps.candidate.outputs.digest }}', not recorded digest '$recorded_digest'." >&2
             exit 1
           }
           {
+            echo "digest=$recorded_digest"
             echo "version=$version"
             echo "schema_version=$schema_version"
             echo "config_version=$config_version"
@@ -147,20 +158,190 @@ jobs:
       - name: Deploy the exact candidate digest and wait for Render's health gate
         id: deploy
         env:
-          CANDIDATE_DIGEST: ${{ steps.candidate.outputs.digest }}
+          CANDIDATE_DIGEST: ${{ steps.identity.outputs.digest }}
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
         run: |
+          set -euo pipefail
+          api="https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys"
           image="$IMAGE_NAME@$CANDIDATE_DIGEST"
           payload="$(jq -cn --arg imageUrl "$image" '{imageUrl: $imageUrl}')"
-          deployment="$(curl --fail --silent --show-error \
+
+          list_deploys() {
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer $RENDER_API_KEY" \
+              --header 'Accept: application/json' \
+              "$api?limit=100"
+          }
+
+          find_candidate_deploys() {
+            list_deploys | jq -c \
+              --argjson known "$known_deploy_ids" \
+              --arg digest "$CANDIDATE_DIGEST" \
+              --arg image "$image" '
+                [.[].deploy
+                  | select(.trigger == "api" and (.image.sha == $digest or .image.ref == $image))
+                  | select(.id as $id | (($known | index($id)) == null))]
+                | sort_by(.createdAt)
+              '
+          }
+
+          recover_candidate_deploys() {
+            local attempt matches
+            for attempt in $(seq 1 12); do
+              if matches="$(find_candidate_deploys)" && [ "$(echo "$matches" | jq length)" -gt 0 ]; then
+                echo "$matches"
+                return 0
+              fi
+              echo "attempt $attempt: waiting for Render to expose the accepted deployment" >&2
+              sleep 5
+            done
+            return 1
+          }
+
+          retrieve_deploy() {
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer $RENDER_API_KEY" \
+              --header 'Accept: application/json' \
+              "$api/$1"
+          }
+
+          cancel_and_wait() {
+            local cancel_attempt deployed_digest deployment id status
+            id="$1"
+            deployment="$(retrieve_deploy "$id" 2>/dev/null || true)"
+            status="$(echo "$deployment" | jq -r '.status // empty' 2>/dev/null || true)"
+            case "$status" in
+              live)
+                deployed_digest="$(echo "$deployment" | jq -r '.image.sha // ""')"
+                if [ "$deployed_digest" = "$CANDIDATE_DIGEST" ]; then
+                  echo "deploy_id=$id" >> "$GITHUB_OUTPUT"
+                  echo "result=Render deploy $id reached live after its health gate" >> "$GITHUB_OUTPUT"
+                  return 2
+                fi
+                echo "Render deploy $id reached live with unexpected digest '$deployed_digest'." >&2
+                return 1
+                ;;
+              build_failed | update_failed | pre_deploy_failed | canceled | deactivated)
+                return 0
+                ;;
+            esac
+
+            if ! curl --fail --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer $RENDER_API_KEY" \
+              --header 'Accept: application/json' \
+              "$api/$id/cancel" >/dev/null; then
+              echo "Render did not immediately accept cancellation for deploy $id; checking its terminal state." >&2
+            fi
+
+            for cancel_attempt in $(seq 1 20); do
+              sleep 3
+              if ! deployment="$(retrieve_deploy "$id")"; then
+                continue
+              fi
+              status="$(echo "$deployment" | jq -r '.status // empty')"
+              case "$status" in
+                live)
+                  deployed_digest="$(echo "$deployment" | jq -r '.image.sha // ""')"
+                  if [ "$deployed_digest" = "$CANDIDATE_DIGEST" ]; then
+                    echo "deploy_id=$id" >> "$GITHUB_OUTPUT"
+                    echo "result=Render deploy $id reached live after its health gate" >> "$GITHUB_OUTPUT"
+                    return 2
+                  fi
+                  echo "Render deploy $id reached live with unexpected digest '$deployed_digest'." >&2
+                  return 1
+                  ;;
+                build_failed | update_failed | pre_deploy_failed | canceled | deactivated)
+                  echo "Render deploy $id is terminal with status $status."
+                  return 0
+                  ;;
+              esac
+            done
+            echo "Render deploy $id could not be confirmed canceled or otherwise non-live." >&2
+            return 1
+          }
+
+          deployment_accepted=false
+          deploy_id=""
+          known_deploy_ids="$(list_deploys | jq -c '[.[].deploy.id]')"
+
+          cleanup_on_exit() {
+            local exit_code=$?
+            local any_live cleanup_failed cleanup_result ids matches
+            trap - EXIT
+            if [ "$exit_code" -eq 0 ] || [ "$deployment_accepted" != true ]; then
+              exit "$exit_code"
+            fi
+
+            set +e
+            ids="$deploy_id"
+            if [ -z "$ids" ]; then
+              matches="$(recover_candidate_deploys)"
+              if [ $? -eq 0 ]; then
+                ids="$(echo "$matches" | jq -r '.[].id')"
+              fi
+            fi
+
+            any_live=false
+            cleanup_failed=false
+            if [ -z "$ids" ]; then
+              echo "Render accepted the deployment, but its ID could not be recovered for cancellation." >&2
+              cleanup_failed=true
+            else
+              while IFS= read -r id; do
+                [ -n "$id" ] || continue
+                cancel_and_wait "$id"
+                cleanup_result=$?
+                case "$cleanup_result" in
+                  0) ;;
+                  2) any_live=true ;;
+                  *) cleanup_failed=true ;;
+                esac
+              done <<< "$ids"
+            fi
+
+            if [ "$any_live" = true ]; then
+              echo "The exact candidate reached live while failure recovery was running; continuing promotion bookkeeping."
+              exit 0
+            fi
+            if [ "$cleanup_failed" = true ]; then
+              echo "The workflow could not prove every accepted candidate deployment reached a non-live terminal state." >&2
+            fi
+            exit "$exit_code"
+          }
+          trap cleanup_on_exit EXIT
+
+          response_file="$RUNNER_TEMP/render-deploy-response.json"
+          http_status="$(curl --silent --show-error \
             --request POST \
             --header "Authorization: Bearer $RENDER_API_KEY" \
             --header 'Accept: application/json' \
             --header 'Content-Type: application/json' \
             --data "$payload" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys")"
-          deploy_id="$(echo "$deployment" | jq -er .id)"
+            --output "$response_file" \
+            --write-out '%{http_code}' \
+            "$api")"
+          case "$http_status" in
+            201 | 202) deployment_accepted=true ;;
+            *)
+              echo "Render rejected the deploy request with HTTP $http_status." >&2
+              exit 1
+              ;;
+          esac
+
+          if [ -s "$response_file" ]; then
+            deploy_id="$(jq -r '.id // empty' "$response_file")"
+          fi
+          if [ -z "$deploy_id" ]; then
+            matches="$(recover_candidate_deploys)"
+            match_count="$(echo "$matches" | jq length)"
+            [ "$match_count" -eq 1 ] || {
+              echo "Render exposed $match_count new API deployments for the candidate; refusing to guess which request was accepted." >&2
+              exit 1
+            }
+            deploy_id="$(echo "$matches" | jq -r '.[0].id')"
+          fi
           echo "deploy_id=$deploy_id" >> "$GITHUB_OUTPUT"
 
           deadline=$(( SECONDS + 600 ))
@@ -170,7 +351,7 @@ jobs:
             deployment="$(curl --fail --silent --show-error \
               --header "Authorization: Bearer $RENDER_API_KEY" \
               --header 'Accept: application/json' \
-              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$deploy_id")"
+              "$api/$deploy_id")"
             status="$(echo "$deployment" | jq -er .status)"
             case "$status" in
               live)
@@ -205,7 +386,7 @@ jobs:
           # Retags the exact digest that was verified; it is never rebuilt.
           docker buildx imagetools create \
             --tag "$IMAGE_NAME:prod" \
-            "$IMAGE_NAME@${{ steps.candidate.outputs.digest }}"
+            "$IMAGE_NAME@${{ steps.identity.outputs.digest }}"
           echo "moved=true" >> "$GITHUB_OUTPUT"
 
       - name: Record the promotion
@@ -214,7 +395,7 @@ jobs:
           RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
           COMMIT: ${{ inputs.commit }}
           IMAGE_REFERENCE: ${{ steps.candidate.outputs.tag }}
-          IMAGE_DIGEST: ${{ steps.candidate.outputs.digest }}
+          IMAGE_DIGEST: ${{ steps.identity.outputs.digest }}
           APP_VERSION: ${{ steps.identity.outputs.version }}
           SCHEMA_VERSION: ${{ steps.identity.outputs.schema_version }}
           CONFIG_VERSION: ${{ steps.identity.outputs.config_version }}
@@ -248,4 +429,4 @@ jobs:
           fi
           echo "The prior image remains available at \`${{ steps.candidate.outputs.previous }}\`." >> "$GITHUB_STEP_SUMMARY"
           echo "If Render did not report the candidate live, its health gate kept the prior deployment serving. If a later bookkeeping step failed, redeploy the rollback target through this workflow." >> "$GITHUB_STEP_SUMMARY"
-          echo "The candidate \`${{ steps.candidate.outputs.digest }}\` remains published and can be promoted again once the cause is understood." >> "$GITHUB_STEP_SUMMARY"
+          echo "The candidate \`${{ steps.identity.outputs.digest }}\` remains published and can be promoted again once the cause is understood." >> "$GITHUB_STEP_SUMMARY"

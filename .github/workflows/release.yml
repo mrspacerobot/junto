@@ -29,7 +29,10 @@ env:
 
 jobs:
   publish-candidate:
-    if: github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -117,8 +120,42 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Preserve the commit tag's immutable release identity
+        id: publication
+        env:
+          COMMIT: ${{ steps.identity.outputs.commit }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IDENTITY_TAG: ${{ env.IMAGE_NAME }}:sha-${{ steps.identity.outputs.commit }}
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
+        run: |
+          existing_digest="$(docker buildx imagetools inspect "$IDENTITY_TAG" --format '{{.Manifest.Digest}}' 2>/dev/null || true)"
+          if release="$(gh release view "$RELEASE_TAG" --json body,targetCommitish 2>/dev/null)"; then
+            recorded_digest="$(echo "$release" | jq -r 'try (.body | capture("(?m)^\\| Image digest \\| `(?<digest>sha256:[0-9a-f]{64})` \\|$").digest) catch ""')"
+            [ "$(echo "$release" | jq -r .targetCommitish)" = "$COMMIT" ] || {
+              echo "Release $RELEASE_TAG does not target $COMMIT." >&2
+              exit 1
+            }
+            [ -n "$recorded_digest" ] || {
+              echo "Release $RELEASE_TAG has no valid recorded image digest." >&2
+              exit 1
+            }
+            [ "$existing_digest" = "$recorded_digest" ] || {
+              echo "Commit tag $IDENTITY_TAG resolves to '$existing_digest', not recorded digest '$recorded_digest'." >&2
+              exit 1
+            }
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Candidate $RELEASE_TAG is already published at $recorded_digest." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          [ -z "$existing_digest" ] || {
+            echo "Commit tag $IDENTITY_TAG already exists at $existing_digest without release $RELEASE_TAG; refusing to overwrite it." >&2
+            exit 1
+          }
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
       - name: Resolve the rollback target this candidate would replace
         id: rollback
+        if: steps.publication.outputs.publish == 'true'
         run: |
           # Whatever `prod` points at now is what production returns to if this
           # candidate is promoted and then has to be withdrawn.
@@ -130,6 +167,7 @@ jobs:
 
       - name: Publish the release candidate image
         id: publish
+        if: steps.publication.outputs.publish == 'true'
         env:
           IDENTITY_TAG: ${{ env.IMAGE_NAME }}:sha-${{ steps.identity.outputs.commit }}
         run: |
@@ -138,6 +176,7 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Record the release
+        if: steps.publication.outputs.publish == 'true'
         env:
           RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
           COMMIT: ${{ steps.identity.outputs.commit }}
@@ -154,10 +193,17 @@ jobs:
           cat "$RUNNER_TEMP/release-record.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the release record and supply-chain evidence
+        if: steps.publication.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IDENTITY_TAG: ${{ env.IMAGE_NAME }}:sha-${{ steps.identity.outputs.commit }}
           RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
         run: |
+          current_digest="$(docker buildx imagetools inspect "$IDENTITY_TAG" --format '{{.Manifest.Digest}}')"
+          [ "$current_digest" = "${{ steps.publish.outputs.digest }}" ] || {
+            echo "Commit tag $IDENTITY_TAG changed from published digest '${{ steps.publish.outputs.digest }}' to '$current_digest'." >&2
+            exit 1
+          }
           gh release create "$RELEASE_TAG" \
             --target "${{ steps.identity.outputs.commit }}" \
             --title "$RELEASE_TAG (candidate)" \

@@ -38,7 +38,9 @@ tag all include the commit identity.
 ## Configure the production approval gate
 
 Create a GitHub environment named `production` before the first promotion.
-Configure at least one required reviewer and prevent self-review. Add:
+Configure at least one required reviewer and prevent self-review. Under
+**Deployment branches and tags**, choose **Selected branches and tags** and add
+only the `master` branch. Do not add a tag rule. Add:
 
 - environment variable `PRODUCTION_URL`, the public HTTPS application URL;
 - environment variable `RENDER_SERVICE_ID`, the ID of the image-backed Render
@@ -69,14 +71,17 @@ The production environment reviewer then checks the candidate release record,
 SBOM, advisories, schema change, configuration identity, backup, and rollback
 target before approving the job.
 
-Promotion resolves the candidate tag to a digest, verifies that the image
-labels and prerelease agree with the requested commit, records the currently
+Promotion reads the publication-time digest from the candidate release record,
+requires the commit tag to still resolve to that digest, verifies that the
+image labels and release agree with the requested commit, records the currently
 live Render image as the rollback target, and asks Render to deploy the exact
-digest. The workflow waits for that specific Render deploy to reach `live`.
-Render reaches that state only after its configured health gate accepts the new
-deployment. If the build, pre-deploy command, update, or health gate fails,
-Render keeps the prior deployment serving and the workflow does not move the
-`prod` tag or finalize the GitHub release.
+recorded digest. The workflow waits for that specific Render deploy to reach
+`live`. Render reaches that state only after its configured health gate accepts
+the new deployment. If Render queues the request without returning its ID, the
+workflow recovers the new deployment from the service's deployment list. If
+the build, pre-deploy command, update, or health gate fails or times out, the
+workflow verifies a non-live terminal state or cancels the deployment before
+failing, and it does not move the `prod` tag or finalize the GitHub release.
 
 Only after the candidate is live does the workflow move
 `ghcr.io/mrspacerobot/junto:prod` to the verified digest and convert the
