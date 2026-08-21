@@ -77,11 +77,12 @@ image labels and release agree with the requested commit, records the currently
 live Render image as the rollback target, and asks Render to deploy the exact
 recorded digest. The workflow waits for that specific Render deploy to reach
 `live`. Render reaches that state only after its configured health gate accepts
-the new deployment. If Render queues the request without returning its ID, the
-workflow recovers the new deployment from the service's deployment list. If
-the build, pre-deploy command, update, or health gate fails or times out, the
-workflow verifies a non-live terminal state or cancels the deployment before
-failing, and it does not move the `prod` tag or finalize the GitHub release.
+the new deployment. If Render queues the request without returning its ID or
+the response is otherwise ambiguous, the workflow recovers any new matching
+deployment from the service's deployment list. If the build, pre-deploy
+command, update, or health gate fails or times out, the workflow verifies a
+non-live terminal state or cancels the deployment before failing, and it does
+not move the `prod` tag or finalize the GitHub release.
 
 Only after the candidate is live does the workflow move
 `ghcr.io/mrspacerobot/junto:prod` to the verified digest and convert the
@@ -106,6 +107,9 @@ procedure before directing traffic to the older application.
 
 - Commit tags and the `prod` tag are navigation aids. The `sha256:` digest in
   the release record is the immutable image identity.
+- Rerunning an interrupted release reuses an orphaned commit tag only when it
+  matches the verified rebuild, then completes any missing release assets or
+  draft publication without overwriting a different image identity.
 - Keep every promoted and rollback-target digest in GHCR. Render pulls the
   digest again for future restarts and rollbacks.
 - Changing Render environment variables does not change the packaged
