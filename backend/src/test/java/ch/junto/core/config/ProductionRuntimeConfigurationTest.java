@@ -39,7 +39,7 @@ class ProductionRuntimeConfigurationTest {
   @DisplayName("forwarding headers are trusted only in production, using the native valve")
   void trustsForwardingHeadersOnlyInProduction() {
     assertThat(PRODUCTION.getProperty("server.forward-headers-strategy")).isEqualTo("native");
-    assertThat(DEFAULTS.getProperty("server.forward-headers-strategy")).isNull();
+    assertThat(DEFAULTS.getProperty("server.forward-headers-strategy")).isEqualTo("none");
   }
 
   @Test
