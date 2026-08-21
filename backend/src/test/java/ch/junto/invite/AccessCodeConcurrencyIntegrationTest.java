@@ -56,7 +56,7 @@ class AccessCodeConcurrencyIntegrationTest extends TestContainerConfig {
     User after = userRepository.save(UserFixture.persistableWithUniqueEmail("after"));
 
     assertThat(accessCodeService.redeemIfAvailable(accessCode.getCode(), before)).isTrue();
-    assertThat(accessCodeService.revoke(accessCode.getCode())).isTrue();
+    assertThat(revoke(accessCode)).isTrue();
     assertThat(accessCodeService.redeemIfAvailable(accessCode.getCode(), after)).isFalse();
 
     assertThat(accessCodeRedemptionRepository.countByAccessCodeId(accessCode.getId())).isEqualTo(1);
@@ -69,7 +69,7 @@ class AccessCodeConcurrencyIntegrationTest extends TestContainerConfig {
   @Test
   void concurrentRedeemersOfARevokedCodeAreAllRejected() throws Exception {
     AccessCode accessCode = sharedCode();
-    accessCodeService.revoke(accessCode.getCode());
+    revoke(accessCode);
     List<User> newcomers =
         IntStream.range(0, 4)
             .mapToObj(index -> userRepository.save(UserFixture.persistableWithUniqueEmail("late")))
@@ -117,6 +117,16 @@ class AccessCodeConcurrencyIntegrationTest extends TestContainerConfig {
         "JUNTO-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
         "pilot",
         administrator);
+  }
+
+  private boolean revoke(AccessCode accessCode) throws Exception {
+    try (var connection = dataSource.getConnection();
+        var statement =
+            connection.prepareStatement(
+                "UPDATE access_codes SET revoked_at = now() WHERE id = ? AND revoked_at IS NULL")) {
+      statement.setObject(1, accessCode.getId());
+      return statement.executeUpdate() == 1;
+    }
   }
 
   private <T> List<Boolean> runConcurrently(List<T> values, ThrowingFunction<T, Boolean> action)

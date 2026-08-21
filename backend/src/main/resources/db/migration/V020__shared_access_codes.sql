@@ -8,7 +8,9 @@ CREATE TABLE access_codes (
     label VARCHAR(64) NOT NULL,
     created_by UUID NOT NULL REFERENCES users(id),
     revoked_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_access_codes_personal_namespace
+        CHECK (code !~* '^JUNTO-[A-Z0-9]{6}$')
 );
 
 -- Bootstrapping the first administrator is a one-time operation, so at most one

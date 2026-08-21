@@ -33,16 +33,14 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 class BootstrapContext {
 
   private static final Logger log = LoggerFactory.getLogger(BootstrapContext.class);
-  private static final EnumSet<MigrationState> NON_CURRENT_STATES =
+  private static final EnumSet<MigrationState> CURRENT_STATES =
       EnumSet.of(
-          MigrationState.PENDING,
-          MigrationState.ABOVE_TARGET,
-          MigrationState.MISSING_SUCCESS,
-          MigrationState.MISSING_FAILED,
-          MigrationState.FAILED,
-          MigrationState.UNDONE,
-          MigrationState.FUTURE_SUCCESS,
-          MigrationState.FUTURE_FAILED);
+          MigrationState.BASELINE,
+          MigrationState.BASELINE_IGNORED,
+          MigrationState.BELOW_BASELINE,
+          MigrationState.SUCCESS,
+          MigrationState.SUPERSEDED,
+          MigrationState.AVAILABLE);
 
   /**
    * Replaces the startup migration with a verification. Bootstrap writes rows into a schema it
@@ -72,7 +70,7 @@ class BootstrapContext {
       boolean hasNonCurrentMigration =
           Arrays.stream(flyway.info().all())
               .map(MigrationInfo::getState)
-              .anyMatch(NON_CURRENT_STATES::contains);
+              .anyMatch(state -> !CURRENT_STATES.contains(state));
       if (hasNonCurrentMigration) {
         throw new BootstrapAbortedException(
             "Refusing to bootstrap: the database schema is not current for this build. "

@@ -29,6 +29,7 @@ public class BootstrapAdminService {
   private static final Logger log = LoggerFactory.getLogger(BootstrapAdminService.class);
   private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
   private static final int MAX_EMAIL_LENGTH = 255;
+  private static final int MINIMUM_ADMIN_INVITE_QUOTA = 1;
   private static final String ADMIN_DISPLAY_NAME = "Administrator";
 
   private final UserRepository userRepository;
@@ -45,8 +46,15 @@ public class BootstrapAdminService {
     String normalizedCode = AccessCodeService.normalize(accessCode);
     validate(normalizedEmail, normalizedCode);
 
+    Optional<AccessCode> existingAccessCode =
+        accessCodeService.findByLabel(AccessCodeService.BOOTSTRAP_LABEL);
+    if (existingAccessCode.isPresent()) {
+      confirmExistingBootstrap(existingAccessCode.get(), normalizedEmail, normalizedCode);
+      return;
+    }
+
     User administrator = ensureAdministrator(normalizedEmail);
-    ensureInitialAccessCode(normalizedCode, administrator);
+    createInitialAccessCode(normalizedCode, administrator);
   }
 
   private void validate(String normalizedEmail, String normalizedCode) {
@@ -92,32 +100,39 @@ public class BootstrapAdminService {
     User administrator = existing.get();
     boolean promoted = administrator.getRole() != UserRole.ADMIN;
     boolean reactivated = administrator.getStatus() != UserStatus.ACTIVE;
-    if (promoted || reactivated) {
+    boolean inviteQuotaGranted =
+        administrator.getInviteCodesRemaining() < MINIMUM_ADMIN_INVITE_QUOTA;
+    if (promoted || reactivated || inviteQuotaGranted) {
       administrator.setRole(UserRole.ADMIN);
       administrator.setStatus(UserStatus.ACTIVE);
+      if (inviteQuotaGranted) {
+        administrator.setInviteCodesRemaining(MINIMUM_ADMIN_INVITE_QUOTA);
+      }
       administrator = userRepository.save(administrator);
     }
-    logAdministrator(promoted || reactivated ? "UPDATED" : "ALREADY_PRESENT");
+    logAdministrator(promoted || reactivated || inviteQuotaGranted ? "UPDATED" : "ALREADY_PRESENT");
     return administrator;
   }
 
-  private void ensureInitialAccessCode(String normalizedCode, User administrator) {
-    Optional<AccessCode> existing =
-        accessCodeService.findByLabel(AccessCodeService.BOOTSTRAP_LABEL);
-    if (existing.isPresent()) {
-      AccessCode accessCode = existing.get();
-      if (!accessCode.getCode().equals(normalizedCode)) {
-        throw new BootstrapAbortedException(
-            "Refusing to bootstrap: a different initial access code already exists (id="
-                + accessCode.getId()
-                + "). Revoke it and issue a replacement instead of bootstrapping a second one.");
-      }
-      logAccessCode(
-          accessCode.isRevoked() ? "ALREADY_PRESENT_REVOKED" : "ALREADY_PRESENT",
-          accessCode.getId());
-      return;
+  private void confirmExistingBootstrap(
+      AccessCode accessCode, String normalizedEmail, String normalizedCode) {
+    if (!accessCode.getCode().equals(normalizedCode)) {
+      throw new BootstrapAbortedException(
+          "Refusing to bootstrap: a different initial access code already exists (id="
+              + accessCode.getId()
+              + "). Revoke it and issue a replacement instead of bootstrapping a second one.");
+    }
+    if (!accessCode.getCreatedBy().getEmail().equals(normalizedEmail)) {
+      throw new BootstrapAbortedException(
+          "Refusing to bootstrap: the first administrator was already bootstrapped for a different identity.");
     }
 
+    logAdministrator("ALREADY_BOOTSTRAPPED");
+    logAccessCode(
+        accessCode.isRevoked() ? "ALREADY_PRESENT_REVOKED" : "ALREADY_PRESENT", accessCode.getId());
+  }
+
+  private void createInitialAccessCode(String normalizedCode, User administrator) {
     if (accessCodeService.clashesWithInviteCode(normalizedCode)) {
       throw new BootstrapAbortedException(
           "Refusing to bootstrap: that code already exists as a personal invite code. "

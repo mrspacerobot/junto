@@ -150,7 +150,10 @@ class AccessCodeIntegrationTest extends BaseIntegrationTest {
   }
 
   private boolean revokeSharedCode() {
-    return accessCodeRepository.revokeIfActive(SHARED_CODE, OffsetDateTime.now()) == 1;
+    return jdbcTemplate.update(
+            "UPDATE access_codes SET revoked_at = now() WHERE label = ? AND revoked_at IS NULL",
+            AccessCodeService.BOOTSTRAP_LABEL)
+        == 1;
   }
 
   private User signUp(String email, String submittedCode) throws Exception {

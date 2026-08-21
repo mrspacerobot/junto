@@ -26,6 +26,8 @@ public class AccessCodeService {
   public static final String BOOTSTRAP_LABEL = "bootstrap";
 
   private static final Pattern CODE_PATTERN = Pattern.compile("^[A-Z0-9-]{8,64}$");
+  private static final Pattern PERSONAL_INVITE_CODE_PATTERN =
+      Pattern.compile("^JUNTO-[A-Z0-9]{6}$");
   private static final Logger log = LoggerFactory.getLogger(AccessCodeService.class);
 
   private final AccessCodeRepository accessCodeRepository;
@@ -47,11 +49,13 @@ public class AccessCodeService {
   }
 
   public static boolean isValidFormat(String normalizedCode) {
-    return normalizedCode != null && CODE_PATTERN.matcher(normalizedCode).matches();
+    return normalizedCode != null
+        && CODE_PATTERN.matcher(normalizedCode).matches()
+        && !PERSONAL_INVITE_CODE_PATTERN.matcher(normalizedCode).matches();
   }
 
   public static String formatRequirement() {
-    return "8 to 64 characters of A-Z, 0-9 or '-'";
+    return "8 to 64 characters of A-Z, 0-9 or '-', outside the reserved JUNTO-XXXXXX personal invite format";
   }
 
   /** True when a submitted signup code names an access code that has not been revoked. */
@@ -99,19 +103,5 @@ public class AccessCodeService {
     AccessCode saved = accessCodeRepository.save(accessCode);
     log.info("Shared access code created (id={}, label={})", saved.getId(), label);
     return saved;
-  }
-
-  /** Returns false when no active code matched, so revoking twice is not reported as a change. */
-  @Transactional
-  public boolean revoke(String code) {
-    String normalized = normalize(code);
-    if (normalized == null) {
-      return false;
-    }
-    boolean revoked = accessCodeRepository.revokeIfActive(normalized, OffsetDateTime.now()) == 1;
-    if (revoked) {
-      log.info("Shared access code revoked");
-    }
-    return revoked;
   }
 }

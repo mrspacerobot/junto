@@ -109,6 +109,41 @@ class BootstrapAdminCommandIntegrationTest {
   }
 
   @Test
+  @DisplayName("refuses when schema history contains a deleted migration")
+  void refusesWhenSchemaHistoryContainsADeletedMigration() throws Exception {
+    migrate();
+    try (Connection connection = connection();
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(
+          """
+          INSERT INTO flyway_schema_history (
+              installed_rank, version, description, type, script, checksum,
+              installed_by, execution_time, success)
+          SELECT max(installed_rank) + 1, '15', 'removed migration', 'SQL',
+              'V015__removed_migration.sql', 0, 'test', 0, true
+          FROM flyway_schema_history
+          """);
+      statement.executeUpdate(
+          """
+          INSERT INTO flyway_schema_history (
+              installed_rank, version, description, type, script, checksum,
+              installed_by, execution_time, success)
+          SELECT max(installed_rank) + 1, '15', 'removed migration', 'DELETE',
+              'V015__removed_migration.sql', 0, 'test', 0, true
+          FROM flyway_schema_history
+          """);
+    }
+
+    assertThat(flyway().validateWithResult().validationSuccessful).isTrue();
+    assertThat(bootstrap(ADMIN_EMAIL, ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.FAILED);
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM users")).isZero();
+      assertThat(count(connection, "SELECT count(*) FROM access_codes")).isZero();
+    }
+  }
+
+  @Test
   @DisplayName(
       "creates the administrator and the initial access code, then changes nothing on a rerun")
   void createsTheAdministratorAndAccessCodeIdempotently() throws Exception {
@@ -139,15 +174,36 @@ class BootstrapAdminCommandIntegrationTest {
   }
 
   @Test
+  @DisplayName("does not override later account administration on a rerun")
+  void doesNotOverrideLaterAccountAdministration() throws Exception {
+    migrate();
+    assertThat(bootstrap(ADMIN_EMAIL, ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.SUCCESS);
+
+    try (Connection connection = connection();
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(
+          "UPDATE users SET role = 'MEMBER', status = 'SUSPENDED', invite_codes_remaining = 0");
+    }
+
+    assertThat(bootstrap(ADMIN_EMAIL, ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.SUCCESS);
+
+    try (Connection connection = connection()) {
+      assertThat(value(connection, "SELECT role FROM users")).isEqualTo("MEMBER");
+      assertThat(value(connection, "SELECT status FROM users")).isEqualTo("SUSPENDED");
+      assertThat(count(connection, "SELECT invite_codes_remaining FROM users")).isZero();
+    }
+  }
+
+  @Test
   @DisplayName("promotes an existing account instead of creating a second one")
   void promotesAnExistingAccount() throws Exception {
     migrate();
     try (Connection connection = connection();
         Statement statement = connection.createStatement()) {
       statement.executeUpdate(
-          "INSERT INTO users(email, display_name, role, status) VALUES ('"
+          "INSERT INTO users(email, display_name, role, status, invite_codes_remaining) VALUES ('"
               + NORMALIZED_ADMIN_EMAIL
-              + "', 'Existing', 'MEMBER', 'SUSPENDED')");
+              + "', 'Existing', 'MEMBER', 'SUSPENDED', 0)");
     }
 
     assertThat(bootstrap(ADMIN_EMAIL, ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.SUCCESS);
@@ -157,6 +213,7 @@ class BootstrapAdminCommandIntegrationTest {
       assertThat(value(connection, "SELECT role FROM users")).isEqualTo("ADMIN");
       assertThat(value(connection, "SELECT status FROM users")).isEqualTo("ACTIVE");
       assertThat(value(connection, "SELECT display_name FROM users")).isEqualTo("Existing");
+      assertThat(count(connection, "SELECT invite_codes_remaining FROM users")).isEqualTo(1);
     }
   }
 
@@ -199,6 +256,19 @@ class BootstrapAdminCommandIntegrationTest {
     assertThat(bootstrap(ADMIN_EMAIL, "short")).isEqualTo(BootstrapAdminCommand.FAILED);
     assertThat(bootstrap(ADMIN_EMAIL, "junto pilot code")).isEqualTo(BootstrapAdminCommand.FAILED);
     assertThat(bootstrap("not-an-email", ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.FAILED);
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM access_codes")).isZero();
+      assertThat(count(connection, "SELECT count(*) FROM users")).isZero();
+    }
+  }
+
+  @Test
+  @DisplayName("reserves the generated personal invite namespace")
+  void reservesThePersonalInviteNamespace() throws Exception {
+    migrate();
+
+    assertThat(bootstrap(ADMIN_EMAIL, "JUNTO-ABC123")).isEqualTo(BootstrapAdminCommand.FAILED);
 
     try (Connection connection = connection()) {
       assertThat(count(connection, "SELECT count(*) FROM access_codes")).isZero();
