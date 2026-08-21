@@ -39,6 +39,32 @@ password properties; they never form part of the JDBC URL. Missing variables
 stop startup through Spring's normal unresolved-placeholder failure without
 echoing credential values.
 
+## First-administrator bootstrap
+
+Run the one-time bootstrap only after the deployed application version has migrated the production
+schema successfully. Supply `JUNTO_BOOTSTRAP_ADMIN_EMAIL` and `JUNTO_BOOTSTRAP_ACCESS_CODE` through
+the deployment platform's one-off secret injection, then invoke:
+
+```bash
+java -jar app.jar bootstrap-admin
+```
+
+Do not pass either value as a command-line argument or paste it into shell history. The command
+refuses a schema that is behind, ahead of, or inconsistent with the application, starts no HTTP
+server or scheduler, and logs no administrator identity or code. Delete both one-off variables as
+soon as the command succeeds, before starting the normal web process.
+
+The initial access code is reusable and has no expiry during the invite-only pilot. Every admitted
+account is recorded separately. Revocation is an operator action that preserves those records:
+
+```sql
+UPDATE access_codes
+SET revoked_at = now()
+WHERE label = 'bootstrap' AND revoked_at IS NULL;
+```
+
+Never delete the code row as a revocation mechanism.
+
 Render Blueprints expose the corresponding managed Postgres properties as
 `host`, `port`, `database`, `user`, and `password`. Map them explicitly to the
 provider-neutral names (replace `junto-db` with the Blueprint database resource

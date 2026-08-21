@@ -1,0 +1,351 @@
+package ch.junto.bootstrap;
+
+import static ch.junto.bootstrap.BootstrapAdminCommand.ACCESS_CODE_VARIABLE;
+import static ch.junto.bootstrap.BootstrapAdminCommand.EMAIL_VARIABLE;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.UnaryOperator;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.Banner;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.web.server.servlet.ServletWebServerFactory;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.WebApplicationContext;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
+
+@Testcontainers
+@DisplayName("bootstrap-admin command")
+class BootstrapAdminCommandIntegrationTest {
+
+  private static final String ADMIN_EMAIL = "Captain@Junto.Example";
+  private static final String NORMALIZED_ADMIN_EMAIL = "captain@junto.example";
+  private static final String ACCESS_CODE = "junto-pilot-2026";
+  private static final String NORMALIZED_ACCESS_CODE = "JUNTO-PILOT-2026";
+
+  @Container
+  static final PostgreSQLContainer<?> postgres =
+      new PostgreSQLContainer<>(
+              DockerImageName.parse("postgis/postgis:16-3.4-alpine")
+                  .asCompatibleSubstituteFor("postgres"))
+          .withDatabaseName("bootstrap_test")
+          .withUsername("test")
+          .withPassword("test");
+
+  @BeforeEach
+  void emptyDatabase() {
+    flyway().clean();
+  }
+
+  @Test
+  @DisplayName("refuses to write anything into a schema that is not current")
+  void refusesWhenTheSchemaIsNotCurrent() throws Exception {
+    int status = bootstrap(ADMIN_EMAIL, ACCESS_CODE);
+
+    assertThat(status).isEqualTo(BootstrapAdminCommand.FAILED);
+    try (Connection connection = connection()) {
+      assertThat(tableExists(connection, "users")).isFalse();
+      assertThat(tableExists(connection, "access_codes")).isFalse();
+    }
+  }
+
+  @Test
+  @DisplayName("refuses when the schema is behind this build")
+  void refusesWhenTheSchemaIsBehind() throws Exception {
+    migrateTo("19");
+
+    int status = bootstrap(ADMIN_EMAIL, ACCESS_CODE);
+
+    assertThat(status).isEqualTo(BootstrapAdminCommand.FAILED);
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM users")).isZero();
+    }
+  }
+
+  @Test
+  @DisplayName("refuses when the schema is ahead of this build")
+  void refusesWhenTheSchemaIsAhead() throws Exception {
+    migrate();
+    try (Connection connection = connection();
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(
+          """
+          INSERT INTO flyway_schema_history (
+              installed_rank, version, description, type, script, checksum,
+              installed_by, execution_time, success)
+          SELECT max(installed_rank) + 1, '999', 'future migration', 'SQL',
+              'V999__future_migration.sql', 0, 'test', 0, true
+          FROM flyway_schema_history
+          """);
+    }
+
+    int status = bootstrap(ADMIN_EMAIL, ACCESS_CODE);
+
+    assertThat(status).isEqualTo(BootstrapAdminCommand.FAILED);
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM users")).isZero();
+      assertThat(count(connection, "SELECT count(*) FROM access_codes")).isZero();
+    }
+  }
+
+  @Test
+  @DisplayName(
+      "creates the administrator and the initial access code, then changes nothing on a rerun")
+  void createsTheAdministratorAndAccessCodeIdempotently() throws Exception {
+    migrate();
+
+    assertThat(bootstrap(ADMIN_EMAIL, ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.SUCCESS);
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM users")).isEqualTo(1);
+      assertThat(value(connection, "SELECT email FROM users")).isEqualTo(NORMALIZED_ADMIN_EMAIL);
+      assertThat(value(connection, "SELECT role FROM users")).isEqualTo("ADMIN");
+      assertThat(value(connection, "SELECT status FROM users")).isEqualTo("ACTIVE");
+      assertThat(value(connection, "SELECT onboarded::text FROM users")).isEqualTo("false");
+      assertThat(count(connection, "SELECT invite_codes_remaining FROM users")).isPositive();
+      assertThat(value(connection, "SELECT code FROM access_codes"))
+          .isEqualTo(NORMALIZED_ACCESS_CODE);
+      assertThat(value(connection, "SELECT label FROM access_codes")).isEqualTo("bootstrap");
+      assertThat(value(connection, "SELECT revoked_at FROM access_codes")).isNull();
+    }
+
+    assertThat(bootstrap(" CAPTAIN@junto.example ", " Junto-Pilot-2026 "))
+        .isEqualTo(BootstrapAdminCommand.SUCCESS);
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM users")).isEqualTo(1);
+      assertThat(count(connection, "SELECT count(*) FROM access_codes")).isEqualTo(1);
+    }
+  }
+
+  @Test
+  @DisplayName("promotes an existing account instead of creating a second one")
+  void promotesAnExistingAccount() throws Exception {
+    migrate();
+    try (Connection connection = connection();
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(
+          "INSERT INTO users(email, display_name, role, status) VALUES ('"
+              + NORMALIZED_ADMIN_EMAIL
+              + "', 'Existing', 'MEMBER', 'SUSPENDED')");
+    }
+
+    assertThat(bootstrap(ADMIN_EMAIL, ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.SUCCESS);
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM users")).isEqualTo(1);
+      assertThat(value(connection, "SELECT role FROM users")).isEqualTo("ADMIN");
+      assertThat(value(connection, "SELECT status FROM users")).isEqualTo("ACTIVE");
+      assertThat(value(connection, "SELECT display_name FROM users")).isEqualTo("Existing");
+    }
+  }
+
+  @Test
+  @DisplayName("refuses a second, different administrator identity")
+  void refusesASecondAdministrator() throws Exception {
+    migrate();
+    bootstrap(ADMIN_EMAIL, ACCESS_CODE);
+
+    assertThat(bootstrap("someone.else@junto.example", ACCESS_CODE))
+        .isEqualTo(BootstrapAdminCommand.FAILED);
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM users")).isEqualTo(1);
+      assertThat(value(connection, "SELECT email FROM users")).isEqualTo(NORMALIZED_ADMIN_EMAIL);
+    }
+  }
+
+  @Test
+  @DisplayName("refuses a second, different initial access code")
+  void refusesASecondInitialAccessCode() throws Exception {
+    migrate();
+    bootstrap(ADMIN_EMAIL, ACCESS_CODE);
+
+    assertThat(bootstrap(ADMIN_EMAIL, "junto-something-else"))
+        .isEqualTo(BootstrapAdminCommand.FAILED);
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM access_codes")).isEqualTo(1);
+      assertThat(value(connection, "SELECT code FROM access_codes"))
+          .isEqualTo(NORMALIZED_ACCESS_CODE);
+    }
+  }
+
+  @Test
+  @DisplayName("refuses an access code that could not be typed unambiguously")
+  void refusesAnUnusableAccessCode() throws Exception {
+    migrate();
+
+    assertThat(bootstrap(ADMIN_EMAIL, "short")).isEqualTo(BootstrapAdminCommand.FAILED);
+    assertThat(bootstrap(ADMIN_EMAIL, "junto pilot code")).isEqualTo(BootstrapAdminCommand.FAILED);
+    assertThat(bootstrap("not-an-email", ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.FAILED);
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM access_codes")).isZero();
+      assertThat(count(connection, "SELECT count(*) FROM users")).isZero();
+    }
+  }
+
+  @Test
+  @DisplayName("takes its inputs only from the environment, never from the command line")
+  void takesItsInputsOnlyFromTheEnvironment() {
+    assertThat(BootstrapAdminCommand.matches(new String[] {})).isFalse();
+    assertThat(BootstrapAdminCommand.matches(new String[] {"--spring.profiles.active=prod"}))
+        .isFalse();
+    assertThat(BootstrapAdminCommand.matches(new String[] {"bootstrap-admin"})).isTrue();
+
+    assertThat(
+            BootstrapAdminCommand.run(
+                new String[] {"bootstrap-admin", "--email=captain@junto.example"},
+                environment(ADMIN_EMAIL, ACCESS_CODE)))
+        .isEqualTo(BootstrapAdminCommand.USAGE);
+    assertThat(BootstrapAdminCommand.run(new String[] {"bootstrap-admin"}, name -> null))
+        .isEqualTo(BootstrapAdminCommand.USAGE);
+  }
+
+  @Test
+  @DisplayName("runs in a context with no web server, no security filter chain and no scheduler")
+  void startsNoWebServerOrSchedulerAndExposesNoHandler() {
+    migrate();
+
+    try (ConfigurableApplicationContext context =
+        new SpringApplicationBuilder(BootstrapContext.class)
+            .web(WebApplicationType.NONE)
+            .bannerMode(Banner.Mode.OFF)
+            .run(datasourceProperties())) {
+
+      assertThat(context).isNotInstanceOf(WebApplicationContext.class);
+      assertThat(context.getBeanNamesForType(ServletWebServerFactory.class)).isEmpty();
+      assertThat(context.getBeanNamesForType(SecurityFilterChain.class)).isEmpty();
+      assertThat(context.getBeanNamesForType(ScheduledAnnotationBeanPostProcessor.class)).isEmpty();
+      assertThat(context.getBeanNamesForType(TaskScheduler.class)).isEmpty();
+      assertThat(context.getBeanNamesForAnnotation(Controller.class)).isEmpty();
+      assertThat(context.getBeanNamesForAnnotation(RestController.class)).isEmpty();
+      assertThat(context.getBeanNamesForType(BootstrapAdminService.class)).hasSize(1);
+    }
+  }
+
+  @Test
+  @DisplayName("keeps the administrator address and the access code out of its audit trail")
+  void printsNoIdentityOrSecret() throws Exception {
+    migrate();
+
+    String output = captureOutput(() -> bootstrap(ADMIN_EMAIL, ACCESS_CODE));
+
+    assertThat(output).doesNotContainIgnoringCase(ADMIN_EMAIL);
+    assertThat(output).doesNotContainIgnoringCase(NORMALIZED_ADMIN_EMAIL);
+    assertThat(output).doesNotContainIgnoringCase("captain");
+    assertThat(output).doesNotContainIgnoringCase(ACCESS_CODE);
+    assertThat(output).doesNotContainIgnoringCase(NORMALIZED_ACCESS_CODE);
+    assertThat(output).doesNotContain("sha256:");
+    assertThat(output).contains("reusable=true", "expiry=none");
+    assertThat(output).contains(EMAIL_VARIABLE, ACCESS_CODE_VARIABLE);
+  }
+
+  private int bootstrap(String email, String accessCode) {
+    return BootstrapAdminCommand.run(
+        new String[] {BootstrapAdminCommand.COMMAND},
+        environment(email, accessCode),
+        datasourceProperties());
+  }
+
+  private static UnaryOperator<String> environment(String email, String accessCode) {
+    Map<String, String> variables = new HashMap<>();
+    variables.put(EMAIL_VARIABLE, email);
+    variables.put(ACCESS_CODE_VARIABLE, accessCode);
+    return variables::get;
+  }
+
+  private static String[] datasourceProperties() {
+    return new String[] {
+      "--spring.datasource.url=" + postgres.getJdbcUrl(),
+      "--spring.datasource.username=" + postgres.getUsername(),
+      "--spring.datasource.password=" + postgres.getPassword()
+    };
+  }
+
+  private static String captureOutput(Runnable action) {
+    PrintStream original = System.out;
+    ByteArrayOutputStream captured = new ByteArrayOutputStream();
+    System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
+    try {
+      action.run();
+    } finally {
+      System.setOut(original);
+    }
+    return captured.toString(StandardCharsets.UTF_8);
+  }
+
+  private static void migrate() {
+    flyway().migrate();
+  }
+
+  private static void migrateTo(String version) {
+    Flyway.configure()
+        .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+        .locations("classpath:db/migration")
+        .cleanDisabled(false)
+        .target(version)
+        .load()
+        .migrate();
+  }
+
+  private static Flyway flyway() {
+    return Flyway.configure()
+        .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+        .locations("classpath:db/migration")
+        .cleanDisabled(false)
+        .load();
+  }
+
+  private static Connection connection() throws Exception {
+    return DriverManager.getConnection(
+        postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+  }
+
+  private static boolean tableExists(Connection connection, String table) throws Exception {
+    return Boolean.parseBoolean(
+        value(
+            connection,
+            "SELECT (EXISTS (SELECT 1 FROM information_schema.tables"
+                + " WHERE table_schema = 'public' AND table_name = '"
+                + table
+                + "'))::text"));
+  }
+
+  private static long count(Connection connection, String sql) throws Exception {
+    try (Statement statement = connection.createStatement();
+        ResultSet result = statement.executeQuery(sql)) {
+      result.next();
+      return result.getLong(1);
+    }
+  }
+
+  private static String value(Connection connection, String sql) throws Exception {
+    try (Statement statement = connection.createStatement();
+        ResultSet result = statement.executeQuery(sql)) {
+      result.next();
+      return result.getString(1);
+    }
+  }
+}

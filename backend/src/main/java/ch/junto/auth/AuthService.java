@@ -3,6 +3,7 @@ package ch.junto.auth;
 import ch.junto.auth.entity.AuthToken;
 import ch.junto.core.exception.ApiException;
 import ch.junto.invite.InviteService;
+import ch.junto.user.EmailNormalizer;
 import ch.junto.user.UserService;
 import ch.junto.user.entity.User;
 import ch.junto.user.enums.UserStatus;
@@ -161,8 +162,7 @@ public class AuthService {
   }
 
   private String normalizeEmail(String email) {
-    if (email == null) return null;
-    return email.trim().toLowerCase();
+    return EmailNormalizer.normalize(email);
   }
 
   @Transactional
