@@ -185,13 +185,19 @@ class BootstrapAdminCommandIntegrationTest {
           "UPDATE users SET role = 'MEMBER', status = 'SUSPENDED', invite_codes_remaining = 0");
     }
 
-    assertThat(bootstrap(ADMIN_EMAIL, ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.SUCCESS);
+    String output =
+        captureOutput(
+            () ->
+                assertThat(bootstrap(ADMIN_EMAIL, ACCESS_CODE))
+                    .isEqualTo(BootstrapAdminCommand.SUCCESS));
 
     try (Connection connection = connection()) {
       assertThat(value(connection, "SELECT role FROM users")).isEqualTo("MEMBER");
       assertThat(value(connection, "SELECT status FROM users")).isEqualTo("SUSPENDED");
       assertThat(count(connection, "SELECT invite_codes_remaining FROM users")).isZero();
     }
+    assertThat(output)
+        .contains("administrator ALREADY_BOOTSTRAPPED (role=MEMBER, status=SUSPENDED)");
   }
 
   @Test

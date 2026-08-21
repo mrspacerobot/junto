@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Creates, or confirms, the first administrator account and the initial shared access code.
  *
  * <p>Both values are supplied by the operator at execution time and neither is written to a log:
- * the audit trail records only the administrator outcome and intended role/status, and identifies
+ * the audit trail records only the administrator outcome and current role/status, and identifies
  * the access code by its non-secret row id. Running the command again with the same two values
  * changes nothing; running it with a different administrator or a different initial code is refused
  * rather than silently creating a second one.
@@ -93,7 +93,7 @@ public class BootstrapAdminService {
       created.setStatus(UserStatus.ACTIVE);
       created.setOnboarded(false);
       User saved = userRepository.save(created);
-      logAdministrator("CREATED");
+      logAdministrator("CREATED", saved);
       return saved;
     }
 
@@ -110,7 +110,9 @@ public class BootstrapAdminService {
       }
       administrator = userRepository.save(administrator);
     }
-    logAdministrator(promoted || reactivated || inviteQuotaGranted ? "UPDATED" : "ALREADY_PRESENT");
+    logAdministrator(
+        promoted || reactivated || inviteQuotaGranted ? "UPDATED" : "ALREADY_PRESENT",
+        administrator);
     return administrator;
   }
 
@@ -122,12 +124,13 @@ public class BootstrapAdminService {
               + accessCode.getId()
               + "). Revoke it and issue a replacement instead of bootstrapping a second one.");
     }
-    if (!accessCode.getCreatedBy().getEmail().equals(normalizedEmail)) {
+    User administrator = accessCode.getCreatedBy();
+    if (!administrator.getEmail().equals(normalizedEmail)) {
       throw new BootstrapAbortedException(
           "Refusing to bootstrap: the first administrator was already bootstrapped for a different identity.");
     }
 
-    logAdministrator("ALREADY_BOOTSTRAPPED");
+    logAdministrator("ALREADY_BOOTSTRAPPED", administrator);
     logAccessCode(
         accessCode.isRevoked() ? "ALREADY_PRESENT_REVOKED" : "ALREADY_PRESENT", accessCode.getId());
   }
@@ -144,12 +147,12 @@ public class BootstrapAdminService {
     logAccessCode("CREATED", created.getId());
   }
 
-  private void logAdministrator(String outcome) {
+  private void logAdministrator(String outcome, User administrator) {
     log.info(
         "Bootstrap: administrator {} (role={}, status={})",
         outcome,
-        UserRole.ADMIN,
-        UserStatus.ACTIVE);
+        administrator.getRole(),
+        administrator.getStatus());
   }
 
   private void logAccessCode(String outcome, UUID accessCodeId) {
