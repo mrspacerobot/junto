@@ -1,7 +1,7 @@
 package ch.junto.core.config;
 
 /**
- * The browser security headers Junto serves on every response.
+ * The browser security header policy Junto applies to responses.
  *
  * <p>These are declared here rather than inline in the security filter chain because each allowance
  * exists for a specific resource the application actually loads. Widening one silently is the
@@ -11,7 +11,7 @@ package ch.junto.core.config;
  */
 public final class BrowserSecurityHeaders {
 
-  /** One year, the minimum age browsers require before a host is eligible for HSTS preloading. */
+  /** One year; Spring Security emits HSTS only for requests it recognizes as secure. */
   public static final long HSTS_MAX_AGE_SECONDS = 31_536_000L;
 
   /**

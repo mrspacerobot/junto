@@ -1,19 +1,14 @@
 import type { RouterHistory } from 'vue-router';
 
 /**
- * Magic-link tokens travel in the URL fragment. A fragment is never placed on the
- * request line and never sent in a `Referer` header, so the one-time secret stays
- * out of provider edge logs, server access logs, and any cross-origin request the
- * app makes for fonts, map tiles, or images.
- *
- * The trade-off is that only the browser can see it, which makes erasing it the
- * client's job. This is the single place that does so.
- */
-
-/**
  * Reads the magic-link token out of the current URL fragment and erases the
  * fragment in the same turn, before any navigation or network request can
  * observe it.
+ *
+ * Fragments are absent from request lines and `Referer` headers, keeping the
+ * secret out of edge, access, and cross-origin resource logs. Because only the
+ * browser can see the fragment, this is the single place responsible for
+ * erasing it.
  *
  * The URL is rewritten with `replaceState` rather than `pushState` so the secret
  * leaves the current history entry instead of gaining one of its own that the

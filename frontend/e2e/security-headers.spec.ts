@@ -50,7 +50,7 @@ async function createMappedActivity(page: Page) {
 
 test('packaged app security policy protects referrers while maps and images render', async ({
   page,
-}) => {
+}, testInfo) => {
   const externalRequests: Request[] = [];
   const externalFailures: string[] = [];
   const cspErrors: string[] = [];
@@ -92,6 +92,7 @@ test('packaged app security policy protects referrers while maps and images rend
   expect(response!.headers()['referrer-policy']).toBe('no-referrer');
   expect(response!.headers()['x-frame-options']).toBe('DENY');
   expect(response!.headers()['x-content-type-options']).toBe('nosniff');
+  expect(response!.headers()['strict-transport-security']).toBeUndefined();
   expect(response!.headers()['content-security-policy']).toContain(
     "img-src 'self' data: https://images.unsplash.com https://a.basemaps.cartocdn.com",
   );
@@ -119,4 +120,42 @@ test('packaged app security policy protects referrers while maps and images rend
   }
   expect(externalFailures).toEqual([]);
   expect(cspErrors).toEqual([]);
+
+  const screenshot = await page.screenshot({ fullPage: true });
+  await testInfo.attach('csp-map-and-images.png', {
+    body: screenshot,
+    contentType: 'image/png',
+  });
+  await testInfo.attach('browser-security-evidence.json', {
+    body: Buffer.from(
+      JSON.stringify(
+        {
+          responseHeaders: {
+            referrerPolicy: response!.headers()['referrer-policy'],
+            xFrameOptions: response!.headers()['x-frame-options'],
+            xContentTypeOptions: response!.headers()['x-content-type-options'],
+            strictTransportSecurity: response!.headers()['strict-transport-security'] ?? null,
+            contentSecurityPolicy: response!.headers()['content-security-policy'],
+          },
+          requestedExternalHosts: [
+            ...new Set(externalRequests.map((request) => new URL(request.url()).hostname)),
+          ],
+          externalRequestsWithReferer: externalRequests
+            .filter((request) => request.headers().referer !== undefined)
+            .map((request) => request.url()),
+          externalFailures,
+          cspErrors,
+          renderedActivityImageNaturalWidth: await activityImage.evaluate(
+            (image: HTMLImageElement) => image.naturalWidth,
+          ),
+          renderedMapTileNaturalWidth: await mapTile.evaluate(
+            (image: HTMLImageElement) => image.naturalWidth,
+          ),
+        },
+        null,
+        2,
+      ),
+    ),
+    contentType: 'application/json',
+  });
 });

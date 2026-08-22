@@ -84,7 +84,7 @@ test('invalid invite produces an actionable signup error', async ({ page }) => {
 test('existing-account sign-in remains invite-free through real email and magic link', async ({
   page,
   request,
-}) => {
+}, testInfo) => {
   const email = uniqueEmail('existing-signin');
   await login(page, email);
   await logout(page);
@@ -133,16 +133,65 @@ test('existing-account sign-in remains invite-free through real email and magic 
   await expect(page.getByRole('alert')).toHaveText(
     'This link is invalid, expired, or has already been used.',
   );
-  await page.getByRole('link', { name: 'Request a new link' }).click();
-  await expect(page).toHaveURL('http://localhost:5173/auth/login');
   expect(await page.evaluate(() => JSON.stringify(window.history.state))).not.toContain(token);
 
+  const historyLengthBeforeSameRouteLink = await page.evaluate(() => window.history.length);
   const sameRouteToken = 'same-route-fragment-secret';
-  await page.goto(`http://localhost:5173/auth/verify#token=${sameRouteToken}`);
+  await page.evaluate((fragmentToken) => {
+    window.location.hash = `token=${fragmentToken}`;
+  }, sameRouteToken);
   await expect(page).toHaveURL('http://localhost:5173/auth/verify');
   expect(await page.evaluate(() => JSON.stringify(window.history.state))).not.toContain(
     sameRouteToken,
   );
+  expect(await page.evaluate(() => window.history.length)).toBe(
+    historyLengthBeforeSameRouteLink + 1,
+  );
+
+  await page.goBack();
+  await expect(page).toHaveURL('http://localhost:5173/auth/verify');
+  expect(await page.evaluate(() => JSON.stringify(window.history.state))).not.toContain(
+    sameRouteToken,
+  );
+
+  await page.getByRole('link', { name: 'Request a new link' }).click();
+  await expect(page).toHaveURL('http://localhost:5173/auth/login');
+
+  const parsedMagicLink = new URL(magicLink!);
+  await testInfo.attach('magic-link-leak-evidence.json', {
+    body: Buffer.from(
+      JSON.stringify(
+        {
+          deliveredLink: `${parsedMagicLink.origin}${parsedMagicLink.pathname}#token=[redacted]`,
+          deliveredLinkQuery: parsedMagicLink.search || null,
+          providerVisibleNavigationUrl: serverVisibleRequestUrls.find(
+            (url) => new URL(url).pathname === '/auth/verify',
+          ),
+          serverVisibleRequestUrlsContainingToken: serverVisibleRequestUrls.filter((url) =>
+            url.includes(token),
+          ),
+          verificationPageUrlAtExchange,
+          thirdPartyReferrersContainingToken: externalReferrers.filter((referer) =>
+            referer.includes(token),
+          ),
+          retainedHistoryStateContainsToken: false,
+          backNavigationRestoredToken: false,
+          initialNavigationHistoryLengthDelta: 1,
+          sameRouteFragmentNavigation: {
+            exercisedViaHashChangeOnMountedView: true,
+            sanitizedUrl: 'http://localhost:5173/auth/verify',
+            retainedHistoryStateContainsToken: false,
+            backNavigationRestoredToken: false,
+            historyLengthDelta: 1,
+          },
+          singleUseReplayRejected: true,
+        },
+        null,
+        2,
+      ),
+    ),
+    contentType: 'application/json',
+  });
 });
 
 test('valid invite emails the exact address, creates the account, and becomes unavailable', async ({

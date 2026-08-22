@@ -127,6 +127,17 @@ same-origin routing with explicit boundaries:
   fallback.
 - Vite's hashed `/assets/**` responses are public and immutable for one year.
   `index.html`, the favicon, and authentication responses are not stored.
+- Authentication emails carry the one-time magic-link token in
+  `/auth/verify#token=...`. The fragment is absent from the HTTP request; the SPA
+  consumes it and replaces the current URL and history entry before exchanging it
+  through `POST /api/auth/verify-token`. Legacy query-string tokens are scrubbed
+  from browser history but are not accepted.
+- Spring Security sends `Referrer-Policy: no-referrer`, frame denial, MIME-sniffing
+  protection, and the restrictive CSP declared in `BrowserSecurityHeaders`. The
+  CSP permits only the same-origin application plus its required Google Fonts,
+  CARTO tile, and Unsplash image origins. One-year HSTS with subdomains is emitted
+  only for requests recognized as secure; behind Render, that recognition belongs
+  to the trusted production proxy runtime configuration.
 
 ## Onda migration
 

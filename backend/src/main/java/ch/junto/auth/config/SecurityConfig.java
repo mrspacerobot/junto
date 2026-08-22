@@ -81,9 +81,9 @@ public class SecurityConfig {
                     // No Referer at all: a magic-link page must never hand its URL to the
                     // font, tile, and image hosts the app loads cross-origin.
                     .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER))
-                    // Spring Security emits HSTS only on requests it sees as secure, which
-                    // behind Render's TLS proxy depends on the forwarded-header handling
-                    // configured for the production profile.
+                    // Spring Security emits HSTS only on requests it sees as secure. Behind
+                    // Render, secure-request recognition belongs to the trusted production
+                    // proxy runtime configuration rather than this filter chain.
                     .httpStrictTransportSecurity(
                         hsts ->
                             hsts.includeSubDomains(true)
