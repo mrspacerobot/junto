@@ -72,6 +72,11 @@ jobs:
         with:
           ref: ${{ inputs.commit }}
 
+      - name: Validate the verified backup reference
+        env:
+          BACKUP_REFERENCE: ${{ inputs.backup_reference }}
+        run: ./scripts/render-release-record.sh validate-backup
+
       - name: Sign in to the container registry
         uses: docker/login-action@v3
         with:

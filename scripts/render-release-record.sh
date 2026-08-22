@@ -6,7 +6,7 @@ set -euo pipefail
 # reviewable statement of what a release is and how to leave it: commit, image
 # identity, schema version, configuration version, backup, and rollback target.
 #
-#   render-release-record.sh candidate|promotion
+#   render-release-record.sh candidate|promotion|validate-backup
 #
 # Values arrive through the environment so the workflows stay declarative; every
 # name below is required and must be non-empty.
@@ -17,6 +17,24 @@ fail() {
   printf 'release record rendering failed: %s\n' "$*" >&2
   exit 1
 }
+
+validate_backup_reference() {
+  local normalized reference
+  reference="${1:-}"
+  case "$reference" in
+    *$'\n'* | *$'\r'* | *'|'*) fail "BACKUP_REFERENCE must be a single safe release-record value" ;;
+  esac
+  normalized="$(printf '%s' "$reference" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')"
+  [ -n "$normalized" ] || fail "BACKUP_REFERENCE must name a verified backup"
+  case "$normalized" in
+    none | n/a | na | tbd | pending | todo | -) fail "BACKUP_REFERENCE must name a verified backup, not '$reference'" ;;
+  esac
+}
+
+if [ "$mode" = validate-backup ]; then
+  validate_backup_reference "${BACKUP_REFERENCE:-}"
+  exit 0
+fi
 
 common_fields=(
   RELEASE_TAG
@@ -40,7 +58,7 @@ promotion_fields=(
 case "$mode" in
   candidate) required_fields=("${common_fields[@]}") ;;
   promotion) required_fields=("${common_fields[@]}" "${promotion_fields[@]}") ;;
-  *) fail "usage: render-release-record.sh candidate|promotion" ;;
+  *) fail "usage: render-release-record.sh candidate|promotion|validate-backup" ;;
 esac
 
 for field in "${required_fields[@]}"; do
@@ -50,9 +68,7 @@ done
 # A promotion must name the backup it can be recovered to. Refusing the obvious
 # placeholders keeps "we will take one later" out of a signed release record.
 if [ "$mode" = promotion ]; then
-  case "$(printf '%s' "$BACKUP_REFERENCE" | tr '[:upper:]' '[:lower:]')" in
-    none|n/a|na|tbd|pending|todo|-) fail "BACKUP_REFERENCE must name a verified backup, not '$BACKUP_REFERENCE'" ;;
-  esac
+  validate_backup_reference "$BACKUP_REFERENCE"
 fi
 
 cat <<RECORD

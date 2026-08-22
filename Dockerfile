@@ -25,12 +25,12 @@ ARG SOURCE_DATE_EPOCH
 WORKDIR /workspace/backend
 COPY backend/gradlew backend/build.gradle backend/settings.gradle ./
 COPY backend/gradle/ ./gradle/
+COPY backend/src/main/resources/ ./src/main/resources/
 RUN --mount=type=cache,target=/root/.gradle \
     chmod +x gradlew && \
     ./gradlew dependencies --configuration runtimeClasspath --no-daemon
 
 COPY backend/src/main/java/ ./src/main/java/
-COPY backend/src/main/resources/ ./src/main/resources/
 COPY --from=frontend-build /workspace/frontend/dist/ ./src/main/resources/static/
 RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew bootJar --no-daemon -PskipFrontend && \

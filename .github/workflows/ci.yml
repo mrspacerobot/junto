@@ -60,6 +60,9 @@ jobs:
           OPENAPI_DATABASE_PASSWORD: junto
         run: ./gradlew generateOpenApiDocs --no-daemon
 
+      - name: Verify the generated OpenAPI contract is committed
+        run: git diff --exit-code -- docs/openapi.json
+
       - name: Record the release identity of this commit
         working-directory: backend
         run: ./gradlew -q releaseMetadata --no-daemon --console=plain | grep -m1 '^{' > "$RUNNER_TEMP/release-metadata.json"

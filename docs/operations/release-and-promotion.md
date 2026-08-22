@@ -73,9 +73,11 @@ target before approving the job.
 
 Promotion reads the publication-time digest from the candidate release record,
 requires the commit tag to still resolve to that digest, verifies that the
-image labels and release agree with the requested commit, records the currently
-live Render image as the rollback target, and asks Render to deploy the exact
-recorded digest. The workflow waits for that specific Render deploy to reach
+image labels and release agree with the requested commit, rejects an empty or
+placeholder backup reference before contacting Render, and requires the
+operator's expected rollback target to match the currently live Render image
+immediately before asking Render to deploy the exact recorded digest. The
+workflow waits for that specific Render deploy to reach
 `live`. Render reaches that state only after its configured health gate accepts
 the new deployment. If Render queues the request without returning its ID or
 the response is otherwise ambiguous, the workflow recovers any new matching
