@@ -37,7 +37,7 @@ const status = ref<'verifying' | 'failed'>('verifying');
 async function verifyMagicLink() {
   // Lift the secret out of the fragment and erase it before the exchange request,
   // so nothing that follows can carry it in a URL or a Referer header.
-  const token = takeMagicLinkToken();
+  const token = takeMagicLinkToken(router.options.history);
   if (!token) {
     status.value = 'failed';
     return;

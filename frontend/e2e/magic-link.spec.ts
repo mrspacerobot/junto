@@ -133,6 +133,9 @@ test('existing-account sign-in remains invite-free through real email and magic 
   await expect(page.getByRole('alert')).toHaveText(
     'This link is invalid, expired, or has already been used.',
   );
+  await page.getByRole('link', { name: 'Request a new link' }).click();
+  await expect(page).toHaveURL('http://localhost:5173/auth/login');
+  expect(await page.evaluate(() => JSON.stringify(window.history.state))).not.toContain(token);
 
   const sameRouteToken = 'same-route-fragment-secret';
   await page.goto(`http://localhost:5173/auth/verify#token=${sameRouteToken}`);

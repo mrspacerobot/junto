@@ -1,3 +1,5 @@
+import type { RouterHistory } from 'vue-router';
+
 /**
  * Magic-link tokens travel in the URL fragment. A fragment is never placed on the
  * request line and never sent in a `Referer` header, so the one-time secret stays
@@ -19,7 +21,7 @@
  *
  * @returns the token, or an empty string when the fragment carries none.
  */
-export function takeMagicLinkToken(): string {
+export function takeMagicLinkToken(routerHistory: RouterHistory): string {
   const url = new URL(window.location.href);
   const token = new URLSearchParams(url.hash.replace(/^#/, '')).get('token') ?? '';
 
@@ -29,11 +31,6 @@ export function takeMagicLinkToken(): string {
   url.searchParams.delete('token');
   url.hash = '';
   const sanitizedLocation = url.pathname + url.search;
-  const currentState = window.history.state;
-  const sanitizedState =
-    currentState && typeof currentState === 'object'
-      ? { ...currentState, current: sanitizedLocation }
-      : currentState;
-  window.history.replaceState(sanitizedState, '', sanitizedLocation);
+  routerHistory.replace(sanitizedLocation);
   return token;
 }
