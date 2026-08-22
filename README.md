@@ -117,6 +117,48 @@ cd backend && ./gradlew spotlessCheck
 cd frontend && npm run format:check
 ```
 
+## Production container
+
+Build the same pinned, multi-stage artifact used by CI from the repository root:
+
+```bash
+source_date_epoch="$(git show -s --format=%ct HEAD)"
+docker build --pull \
+  --build-arg SOURCE_DATE_EPOCH="$source_date_epoch" \
+  --tag junto:local .
+./scripts/verify-image.sh junto:local
+./scripts/scan-image-secrets.sh junto:local
+```
+
+CI additionally builds twice without cache for one fixed platform and compares
+the runtime platform manifests. Provenance is disabled only for that equality
+check because per-build attestations can legitimately change the outer image
+index.
+
+The image serves the compiled Vue application and Spring Boot API together on
+port 8080 and activates the `prod` profile by default. It needs an external
+PostgreSQL/PostGIS database, the public application URL, and a Resend API key.
+For a local production-profile run using the Compose database:
+
+```bash
+docker compose up -d --wait postgres
+: "${RESEND_API_KEY:?set RESEND_API_KEY first}"
+docker run --detach --name junto --publish 8080:8080 \
+  --add-host host.docker.internal:host-gateway \
+  --env DATABASE_HOST=host.docker.internal \
+  --env DATABASE_PORT=5432 \
+  --env DATABASE_NAME=junto \
+  --env DATABASE_USERNAME=junto \
+  --env DATABASE_PASSWORD=junto \
+  --env APP_BASE_URL='http://localhost:8080' \
+  --env RESEND_API_KEY \
+  junto:local
+```
+
+Open <http://localhost:8080>. Stop with `docker stop junto`; Docker sends
+`SIGTERM` directly to Java so Spring can finish its graceful shutdown, then
+remove the stopped container with `docker rm junto`.
+
 ## Verification
 
 ```bash

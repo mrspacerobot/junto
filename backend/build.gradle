@@ -235,6 +235,21 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+tasks.named('bootJar') {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+// When building inside Docker, front-end assets arrive from a separate build
+// stage; skip the Spring Boot auto-frontend tasks that require npm on PATH.
+if (project.hasProperty('skipFrontend')) {
+    tasks.configureEach {
+        if (name.startsWith('frontend') || name == 'syncFrontend') {
+            enabled = false
+        }
+    }
+}
+
 openApi {
     apiDocsUrl.set("http://localhost:8080/v3/api-docs")
     outputDir.set(file("../docs"))

@@ -116,6 +116,32 @@ jobs:
           npm run test:unit
           npm run build
 
+  production-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verify the effective production context allowlist
+        run: ./scripts/test-docker-context.sh
+
+      - name: Build the same-platform production artifact reproducibly twice
+        run: |
+          source_date_epoch="$(git show -s --format=%ct HEAD)"
+          ./scripts/verify-image-reproducibility.sh junto:ci linux/amd64 "$source_date_epoch"
+
+      - name: Verify image contents, startup, and graceful shutdown
+        run: ./scripts/verify-image.sh junto:ci
+
+      - name: Scan every image layer and the nested application archive for secrets
+        run: ./scripts/scan-image-secrets.sh junto:ci
+
+      - name: Prove secret scan and history-inspection coverage with canaries
+        run: ./scripts/test-image-secret-scan.sh
+
   e2e:
     needs: [backend, frontend]
     runs-on: ubuntu-latest
