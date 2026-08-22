@@ -13,6 +13,11 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.UnaryOperator;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
@@ -174,6 +179,45 @@ class BootstrapAdminCommandIntegrationTest {
   }
 
   @Test
+  @DisplayName("serializes concurrent invocations for one normalized administrator identity")
+  void serializesConcurrentInvocations() throws Exception {
+    migrate();
+    delayUserInserts();
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    CountDownLatch ready = new CountDownLatch(2);
+    CountDownLatch start = new CountDownLatch(1);
+
+    try {
+      Future<Integer> first =
+          executor.submit(
+              () -> {
+                ready.countDown();
+                start.await();
+                return bootstrap(ADMIN_EMAIL, ACCESS_CODE);
+              });
+      Future<Integer> second =
+          executor.submit(
+              () -> {
+                ready.countDown();
+                start.await();
+                return bootstrap(" CAPTAIN@junto.example ", " Junto-Pilot-2026 ");
+              });
+
+      assertThat(ready.await(30, TimeUnit.SECONDS)).isTrue();
+      start.countDown();
+      assertThat(first.get(1, TimeUnit.MINUTES)).isEqualTo(BootstrapAdminCommand.SUCCESS);
+      assertThat(second.get(1, TimeUnit.MINUTES)).isEqualTo(BootstrapAdminCommand.SUCCESS);
+    } finally {
+      executor.shutdownNow();
+    }
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM users")).isEqualTo(1);
+      assertThat(count(connection, "SELECT count(*) FROM access_codes")).isEqualTo(1);
+    }
+  }
+
+  @Test
   @DisplayName("does not override later account administration on a rerun")
   void doesNotOverrideLaterAccountAdministration() throws Exception {
     migrate();
@@ -262,6 +306,8 @@ class BootstrapAdminCommandIntegrationTest {
     assertThat(bootstrap(ADMIN_EMAIL, "short")).isEqualTo(BootstrapAdminCommand.FAILED);
     assertThat(bootstrap(ADMIN_EMAIL, "junto pilot code")).isEqualTo(BootstrapAdminCommand.FAILED);
     assertThat(bootstrap("not-an-email", ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.FAILED);
+    assertThat(bootstrap("a".repeat(65) + "@junto.example", ACCESS_CODE))
+        .isEqualTo(BootstrapAdminCommand.FAILED);
 
     try (Connection connection = connection()) {
       assertThat(count(connection, "SELECT count(*) FROM access_codes")).isZero();
@@ -338,6 +384,31 @@ class BootstrapAdminCommandIntegrationTest {
     assertThat(output).contains(EMAIL_VARIABLE, ACCESS_CODE_VARIABLE);
   }
 
+  @Test
+  @DisplayName("reports creation only after the bootstrap transaction commits")
+  void reportsCreationOnlyAfterCommit() throws Exception {
+    migrate();
+    rejectAccessCodeInserts();
+
+    String output =
+        captureOutput(
+            () ->
+                assertThat(bootstrap(ADMIN_EMAIL, ACCESS_CODE))
+                    .isEqualTo(BootstrapAdminCommand.FAILED));
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM users")).isZero();
+      assertThat(count(connection, "SELECT count(*) FROM access_codes")).isZero();
+    }
+    assertThat(output)
+        .doesNotContain(
+            "administrator CREATED", "Shared access code created", "initial access code CREATED")
+        .doesNotContainIgnoringCase(ADMIN_EMAIL)
+        .doesNotContainIgnoringCase(NORMALIZED_ADMIN_EMAIL)
+        .doesNotContainIgnoringCase(ACCESS_CODE)
+        .doesNotContainIgnoringCase(NORMALIZED_ACCESS_CODE);
+  }
+
   private int bootstrap(String email, String accessCode) {
     return BootstrapAdminCommand.run(
         new String[] {BootstrapAdminCommand.COMMAND},
@@ -384,6 +455,54 @@ class BootstrapAdminCommandIntegrationTest {
         .target(version)
         .load()
         .migrate();
+  }
+
+  private static void delayUserInserts() throws Exception {
+    try (Connection connection = connection();
+        Statement statement = connection.createStatement()) {
+      statement.execute(
+          """
+          CREATE FUNCTION delay_user_insert()
+          RETURNS trigger
+          LANGUAGE plpgsql
+          AS $$
+          BEGIN
+              PERFORM pg_sleep(2);
+              RETURN NEW;
+          END;
+          $$
+          """);
+      statement.execute(
+          """
+          CREATE TRIGGER delay_user_insert
+          BEFORE INSERT ON users
+          FOR EACH ROW EXECUTE FUNCTION delay_user_insert()
+          """);
+    }
+  }
+
+  private static void rejectAccessCodeInserts() throws Exception {
+    try (Connection connection = connection();
+        Statement statement = connection.createStatement()) {
+      statement.execute(
+          """
+          CREATE FUNCTION reject_access_code_insert()
+          RETURNS trigger
+          LANGUAGE plpgsql
+          AS $$
+          BEGIN
+              RAISE EXCEPTION 'access code insert rejected';
+              RETURN NEW;
+          END;
+          $$
+          """);
+      statement.execute(
+          """
+          CREATE TRIGGER reject_access_code_insert
+          BEFORE INSERT ON access_codes
+          FOR EACH ROW EXECUTE FUNCTION reject_access_code_insert()
+          """);
+    }
   }
 
   private static Flyway flyway() {

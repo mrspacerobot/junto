@@ -1,16 +1,18 @@
 package ch.junto.bootstrap;
 
+import ch.junto.core.TransactionAfterCommit;
 import ch.junto.invite.AccessCodeService;
 import ch.junto.invite.entity.AccessCode;
 import ch.junto.user.EmailNormalizer;
 import ch.junto.user.UserRepository;
+import ch.junto.user.ValidEmailAddress;
 import ch.junto.user.entity.User;
 import ch.junto.user.enums.UserRole;
 import ch.junto.user.enums.UserStatus;
+import jakarta.validation.Validator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,17 +29,24 @@ import org.springframework.transaction.annotation.Transactional;
 public class BootstrapAdminService {
 
   private static final Logger log = LoggerFactory.getLogger(BootstrapAdminService.class);
-  private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
   private static final int MAX_EMAIL_LENGTH = 255;
   private static final int MINIMUM_ADMIN_INVITE_QUOTA = 1;
   private static final String ADMIN_DISPLAY_NAME = "Administrator";
 
   private final UserRepository userRepository;
   private final AccessCodeService accessCodeService;
+  private final PostgresBootstrapLock bootstrapLock;
+  private final Validator validator;
 
-  public BootstrapAdminService(UserRepository userRepository, AccessCodeService accessCodeService) {
+  public BootstrapAdminService(
+      UserRepository userRepository,
+      AccessCodeService accessCodeService,
+      PostgresBootstrapLock bootstrapLock,
+      Validator validator) {
     this.userRepository = userRepository;
     this.accessCodeService = accessCodeService;
+    this.bootstrapLock = bootstrapLock;
+    this.validator = validator;
   }
 
   @Transactional
@@ -45,6 +54,7 @@ public class BootstrapAdminService {
     String normalizedEmail = EmailNormalizer.normalize(email);
     String normalizedCode = AccessCodeService.normalize(accessCode);
     validate(normalizedEmail, normalizedCode);
+    bootstrapLock.acquire();
 
     Optional<AccessCode> existingAccessCode =
         accessCodeService.findByLabel(AccessCodeService.BOOTSTRAP_LABEL);
@@ -60,7 +70,7 @@ public class BootstrapAdminService {
   private void validate(String normalizedEmail, String normalizedCode) {
     if (normalizedEmail == null
         || normalizedEmail.length() > MAX_EMAIL_LENGTH
-        || !EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
+        || !validator.validate(new AdministratorIdentity(normalizedEmail)).isEmpty()) {
       throw new BootstrapAbortedException(
           "Refusing to bootstrap: the administrator address is not a valid email address.");
     }
@@ -148,18 +158,21 @@ public class BootstrapAdminService {
   }
 
   private void logAdministrator(String outcome, User administrator) {
-    log.info(
-        "Bootstrap: administrator {} (role={}, status={})",
-        outcome,
-        administrator.getRole(),
-        administrator.getStatus());
+    UserRole role = administrator.getRole();
+    UserStatus status = administrator.getStatus();
+    TransactionAfterCommit.run(
+        () -> log.info("Bootstrap: administrator {} (role={}, status={})", outcome, role, status));
   }
 
   private void logAccessCode(String outcome, UUID accessCodeId) {
-    log.info(
-        "Bootstrap: initial access code {} (id={}, label={}, reusable=true, expiry=none)",
-        outcome,
-        accessCodeId,
-        AccessCodeService.BOOTSTRAP_LABEL);
+    TransactionAfterCommit.run(
+        () ->
+            log.info(
+                "Bootstrap: initial access code {} (id={}, label={}, reusable=true, expiry=none)",
+                outcome,
+                accessCodeId,
+                AccessCodeService.BOOTSTRAP_LABEL));
   }
+
+  private record AdministratorIdentity(@ValidEmailAddress String email) {}
 }

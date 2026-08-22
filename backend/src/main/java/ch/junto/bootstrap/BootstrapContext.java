@@ -29,7 +29,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @EnableAutoConfiguration
 @EntityScan(basePackageClasses = JuntoApplication.class)
 @EnableJpaRepositories(basePackageClasses = JuntoApplication.class)
-@Import({BootstrapAdminService.class, AccessCodeService.class})
+@Import({BootstrapAdminService.class, PostgresBootstrapLock.class, AccessCodeService.class})
 class BootstrapContext {
 
   private static final Logger log = LoggerFactory.getLogger(BootstrapContext.class);

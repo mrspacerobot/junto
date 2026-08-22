@@ -1,10 +1,12 @@
 package ch.junto.invite;
 
+import ch.junto.core.TransactionAfterCommit;
 import ch.junto.invite.entity.AccessCode;
 import ch.junto.user.entity.User;
 import java.time.OffsetDateTime;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,7 +103,9 @@ public class AccessCodeService {
     accessCode.setLabel(label);
     accessCode.setCreatedBy(createdBy);
     AccessCode saved = accessCodeRepository.save(accessCode);
-    log.info("Shared access code created (id={}, label={})", saved.getId(), label);
+    UUID id = saved.getId();
+    TransactionAfterCommit.run(
+        () -> log.info("Shared access code created (id={}, label={})", id, label));
     return saved;
   }
 }

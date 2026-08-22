@@ -1,11 +1,11 @@
 package ch.junto.auth;
 
 import ch.junto.auth.dto.MeResponse;
+import ch.junto.user.ValidEmailAddress;
 import ch.junto.user.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -30,12 +30,12 @@ public class AuthController {
     this.authRateLimiter = authRateLimiter;
   }
 
-  public record RequestCodeRequest(@NotBlank @Email String email) {}
+  public record RequestCodeRequest(@ValidEmailAddress String email) {}
 
-  public record RequestSignupCodeRequest(@NotBlank @Email String email, String inviteCode) {}
+  public record RequestSignupCodeRequest(@ValidEmailAddress String email, String inviteCode) {}
 
   public record VerifyCodeRequest(
-      @NotBlank @Email String email, @NotBlank @Pattern(regexp = "\\d{6}") String code) {}
+      @ValidEmailAddress String email, @NotBlank @Pattern(regexp = "\\d{6}") String code) {}
 
   public record VerifyTokenRequest(@NotBlank String token) {}
 
