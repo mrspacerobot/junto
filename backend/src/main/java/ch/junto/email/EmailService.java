@@ -19,8 +19,19 @@ public class EmailService {
     this.appBaseUrl = appBaseUrl;
   }
 
+  /**
+   * Builds the magic-link URL. The one-time token lives in the URL fragment, which browsers never
+   * put on the request line and never send in a {@code Referer} header, so the secret stays out of
+   * edge, proxy, and access logs. The Vue verification view reads it client-side and exchanges it
+   * through {@code POST /api/auth/verify-token}. Moving the token back into the query string or the
+   * path would reintroduce the leak; {@code MagicLinkUrlTest} guards the shape.
+   */
+  static String magicLinkUrl(String appBaseUrl, String magicLinkToken) {
+    return appBaseUrl + "/auth/verify#token=" + magicLinkToken;
+  }
+
   public void sendAuthCode(String toEmail, String code, String magicLinkToken) {
-    String magicLinkUrl = appBaseUrl + "/auth/verify?token=" + magicLinkToken;
+    String magicLinkUrl = magicLinkUrl(appBaseUrl, magicLinkToken);
 
     SimpleMailMessage message = new SimpleMailMessage();
     message.setTo(toEmail);

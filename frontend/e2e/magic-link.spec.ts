@@ -95,11 +95,51 @@ test('existing-account sign-in remains invite-free through real email and magic 
 
   await expect(page.getByText(`If an account exists for ${email}`)).toBeVisible();
   const text = await waitForAuthEmail(request, email);
-  const magicLink = text.match(/http:\/\/localhost:5173\/auth\/verify\?token=[^\s]+/)?.[0];
+  const magicLink = text.match(/http:\/\/localhost:5173\/auth\/verify#token=[^\s]+/)?.[0];
   expect(magicLink).toBeTruthy();
 
+  const token = new URL(magicLink!).hash.slice('#token='.length);
+  const serverVisibleRequestUrls: string[] = [];
+  const externalReferrers: string[] = [];
+  let verificationPageUrlAtExchange = '';
+  page.on('request', (browserRequest) => {
+    const requestUrl = new URL(browserRequest.url());
+    if (requestUrl.origin === new URL(magicLink!).origin) {
+      serverVisibleRequestUrls.push(browserRequest.url());
+    } else {
+      externalReferrers.push(browserRequest.headers().referer ?? '');
+    }
+    if (requestUrl.pathname === '/api/auth/verify-token') {
+      verificationPageUrlAtExchange = browserRequest.frame().url();
+    }
+  });
+
+  const historyLengthBeforeMagicLink = await page.evaluate(() => window.history.length);
   await page.goto(magicLink!);
   await expect(page).toHaveURL(/\/activities$/, { timeout: 15_000 });
+  expect(serverVisibleRequestUrls).not.toContainEqual(expect.stringContaining(token));
+  expect(verificationPageUrlAtExchange).toBe('http://localhost:5173/auth/verify');
+  expect(externalReferrers).not.toContainEqual(expect.stringContaining(token));
+  expect(await page.evaluate(() => JSON.stringify(window.history.state))).not.toContain(token);
+  await expect
+    .poll(() => page.evaluate(() => window.history.length))
+    .toBe(historyLengthBeforeMagicLink + 1);
+
+  await page.goBack();
+  await expect(page).not.toHaveURL(new RegExp(token));
+
+  await logout(page);
+  await page.goto(magicLink!);
+  await expect(page.getByRole('alert')).toHaveText(
+    'This link is invalid, expired, or has already been used.',
+  );
+
+  const sameRouteToken = 'same-route-fragment-secret';
+  await page.goto(`http://localhost:5173/auth/verify#token=${sameRouteToken}`);
+  await expect(page).toHaveURL('http://localhost:5173/auth/verify');
+  expect(await page.evaluate(() => JSON.stringify(window.history.state))).not.toContain(
+    sameRouteToken,
+  );
 });
 
 test('valid invite emails the exact address, creates the account, and becomes unavailable', async ({

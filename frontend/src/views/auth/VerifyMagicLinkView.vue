@@ -23,26 +23,27 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import JuntoLogo from '@/components/JuntoLogo.vue';
 import { authVerifyToken } from '@/api/generated/sdk.gen';
+import { takeMagicLinkToken } from '@/auth/magicLinkToken';
 import { useAuthStore } from '@/stores/auth';
 
-const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const status = ref<'verifying' | 'failed'>('verifying');
 
-onMounted(async () => {
-  const token = typeof route.query.token === 'string' ? route.query.token : '';
-  // Remove the one-time secret from browser history before making the request.
-  window.history.replaceState({}, '', '/auth/verify');
+async function verifyMagicLink() {
+  // Lift the secret out of the fragment and erase it before the exchange request,
+  // so nothing that follows can carry it in a URL or a Referer header.
+  const token = takeMagicLinkToken();
   if (!token) {
     status.value = 'failed';
     return;
   }
 
+  status.value = 'verifying';
   try {
     const { error } = await authVerifyToken({ body: { token } });
     if (error) {
@@ -54,5 +55,14 @@ onMounted(async () => {
   } catch {
     status.value = 'failed';
   }
+}
+
+onMounted(() => {
+  // A second link opened while this route is already mounted is only a fragment
+  // navigation, so it must be consumed without relying on a component remount.
+  window.addEventListener('hashchange', verifyMagicLink);
+  void verifyMagicLink();
 });
+
+onUnmounted(() => window.removeEventListener('hashchange', verifyMagicLink));
 </script>

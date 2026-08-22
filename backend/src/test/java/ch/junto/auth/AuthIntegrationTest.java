@@ -292,6 +292,55 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("should reject magic-link reuse")
+    void shouldRejectMagicLinkReuse() throws Exception {
+      seedUser("magic-reuse@junto.app");
+      mockMvc.perform(
+          postJson(
+              "/api/auth/request-code",
+              new AuthController.RequestCodeRequest("magic-reuse@junto.app"),
+              "magic-reuse-request"));
+      String token = grabToken("magic-reuse@junto.app").getToken().toString();
+
+      mockMvc
+          .perform(
+              postJson(
+                  "/api/auth/verify-token",
+                  new AuthController.VerifyTokenRequest(token),
+                  "magic-reuse-first"))
+          .andExpect(status().isOk());
+      mockMvc
+          .perform(
+              postJson(
+                  "/api/auth/verify-token",
+                  new AuthController.VerifyTokenRequest(token),
+                  "magic-reuse-second"))
+          .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("should reject an expired magic link")
+    void shouldRejectExpiredMagicLink() throws Exception {
+      seedUser("magic-expired@junto.app");
+      mockMvc.perform(
+          postJson(
+              "/api/auth/request-code",
+              new AuthController.RequestCodeRequest("magic-expired@junto.app"),
+              "magic-expired-request"));
+      AuthToken token = grabToken("magic-expired@junto.app");
+      token.setExpiresAt(OffsetDateTime.now().minusMinutes(1));
+      authTokenRepository.saveAndFlush(token);
+
+      mockMvc
+          .perform(
+              postJson(
+                  "/api/auth/verify-token",
+                  new AuthController.VerifyTokenRequest(token.getToken().toString()),
+                  "magic-expired-verify"))
+          .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("should return a visible rate-limit error")
     void shouldExposeRequestRateLimit() throws Exception {
       seedUser("rate-visible@junto.app");

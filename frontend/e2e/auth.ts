@@ -7,9 +7,9 @@ import { type Page } from '@playwright/test';
  * Uses the browser's fetch so the session cookie lands in the
  * browser's own cookie jar on the correct origin.
  */
-export async function login(page: Page, email: string) {
-  // Navigate to the app — may redirect to login page, that's fine
-  await page.goto('/auth/login');
+export async function login(page: Page, email: string, appBaseUrl = '') {
+  // Navigate to the app - it may redirect to the login page, which is fine.
+  await page.goto(`${appBaseUrl}/auth/login`);
   await page.waitForLoadState('domcontentloaded');
 
   // Get CSRF token from cookies (set by Spring Security)

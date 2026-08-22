@@ -1,5 +1,6 @@
 package ch.junto.auth.config;
 
+import ch.junto.core.config.BrowserSecurityHeaders;
 import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -13,6 +14,7 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 
 @Configuration
 @EnableWebSecurity
@@ -70,7 +72,25 @@ public class SecurityConfig {
                     .permitAll()
                     .anyRequest()
                     .authenticated())
-        .headers(headers -> headers.cacheControl(Customizer.withDefaults()))
+        .headers(
+            headers ->
+                headers
+                    .cacheControl(Customizer.withDefaults())
+                    .contentTypeOptions(Customizer.withDefaults())
+                    .frameOptions(frame -> frame.deny())
+                    // No Referer at all: a magic-link page must never hand its URL to the
+                    // font, tile, and image hosts the app loads cross-origin.
+                    .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER))
+                    // Spring Security emits HSTS only on requests it sees as secure, which
+                    // behind Render's TLS proxy depends on the forwarded-header handling
+                    // configured for the production profile.
+                    .httpStrictTransportSecurity(
+                        hsts ->
+                            hsts.includeSubDomains(true)
+                                .maxAgeInSeconds(BrowserSecurityHeaders.HSTS_MAX_AGE_SECONDS))
+                    .contentSecurityPolicy(
+                        csp ->
+                            csp.policyDirectives(BrowserSecurityHeaders.CONTENT_SECURITY_POLICY)))
         .sessionManagement(s -> s.sessionFixation(sf -> sf.changeSessionId()))
         .exceptionHandling(
             e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
