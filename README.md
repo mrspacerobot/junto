@@ -119,7 +119,8 @@ cd frontend && npm run format:check
 
 ## Production container
 
-Build the same pinned, multi-stage artifact used by CI from the repository root:
+Build the pinned, multi-stage artifact from the checked-in OpenAPI contract at
+the repository root:
 
 ```bash
 source_date_epoch="$(git show -s --format=%ct HEAD)"
@@ -130,11 +131,13 @@ docker build --pull \
 ./scripts/scan-image-secrets.sh junto:local
 ```
 
-On master and on pull requests, CI additionally builds twice without cache for
-one fixed platform and compares the runtime platform manifests, then hands that
-verified artifact to the remaining checks. Provenance is disabled for the
-equality check because per-build attestations can legitimately change the outer
-image index. Branch pushes build once and skip only the comparison.
+CI first replaces the checked-in contract with the schema-generated OpenAPI
+artifact described under [Verification](#verification). On master and on pull
+requests, it additionally builds twice without cache for one fixed platform and
+compares the runtime platform manifests, then hands that verified artifact to
+the remaining checks. Provenance is disabled for the equality check because
+per-build attestations can legitimately change the outer image index. Other
+branch pushes covered by the workflow build once and skip only the comparison.
 
 The image serves the compiled Vue application and Spring Boot API together on
 port 8080 and activates the `prod` profile by default. It needs an external
