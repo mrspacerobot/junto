@@ -92,6 +92,11 @@ public class AccessCodeService {
     return normalizedCode != null && inviteCodeRepository.findByCode(normalizedCode).isPresent();
   }
 
+  /** True when an access code already carries this code string, revoked or not. */
+  public boolean exists(String normalizedCode) {
+    return normalizedCode != null && accessCodeRepository.findByCode(normalizedCode).isPresent();
+  }
+
   @Transactional
   public AccessCode create(String normalizedCode, String label, User createdBy) {
     if (!isValidFormat(normalizedCode)) {

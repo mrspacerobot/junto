@@ -114,6 +114,32 @@ class BootstrapAdminCommandIntegrationTest {
   }
 
   @Test
+  @DisplayName("refuses when schema history is baselined above this build")
+  void refusesWhenTheSchemaIsBaselinedAboveThisBuild() throws Exception {
+    migrate();
+    try (Connection connection = connection();
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(
+          """
+          INSERT INTO flyway_schema_history (
+              installed_rank, version, description, type, script, checksum,
+              installed_by, execution_time, success)
+          SELECT max(installed_rank) + 1, '999', 'operator baseline', 'BASELINE',
+              'operator baseline', NULL, 'test', 0, true
+          FROM flyway_schema_history
+          """);
+    }
+
+    int status = bootstrap(ADMIN_EMAIL, ACCESS_CODE);
+
+    assertThat(status).isEqualTo(BootstrapAdminCommand.FAILED);
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM users")).isZero();
+      assertThat(count(connection, "SELECT count(*) FROM access_codes")).isZero();
+    }
+  }
+
+  @Test
   @DisplayName("refuses when schema history contains a deleted migration")
   void refusesWhenSchemaHistoryContainsADeletedMigration() throws Exception {
     migrate();
@@ -296,6 +322,39 @@ class BootstrapAdminCommandIntegrationTest {
       assertThat(value(connection, "SELECT code FROM access_codes"))
           .isEqualTo(NORMALIZED_ACCESS_CODE);
     }
+  }
+
+  @Test
+  @DisplayName("refuses a code another shared access code already holds, without echoing it")
+  void refusesACodeAnotherAccessCodeAlreadyHolds() throws Exception {
+    migrate();
+    try (Connection connection = connection();
+        Statement statement = connection.createStatement()) {
+      statement.executeUpdate(
+          "INSERT INTO users(email, display_name, role, status)"
+              + " VALUES ('quartermaster@junto.example', 'Quartermaster', 'MEMBER', 'ACTIVE')");
+      statement.executeUpdate(
+          "INSERT INTO access_codes(code, label, created_by) SELECT '"
+              + NORMALIZED_ACCESS_CODE
+              + "', 'pilot', id FROM users WHERE email = 'quartermaster@junto.example'");
+    }
+
+    String output =
+        captureOutput(
+            () ->
+                assertThat(bootstrap(ADMIN_EMAIL, ACCESS_CODE))
+                    .isEqualTo(BootstrapAdminCommand.FAILED));
+
+    try (Connection connection = connection()) {
+      assertThat(count(connection, "SELECT count(*) FROM access_codes")).isEqualTo(1);
+      assertThat(value(connection, "SELECT label FROM access_codes")).isEqualTo("pilot");
+      assertThat(count(connection, "SELECT count(*) FROM users")).isEqualTo(1);
+    }
+    assertThat(output)
+        .doesNotContainIgnoringCase(ACCESS_CODE)
+        .doesNotContainIgnoringCase(NORMALIZED_ACCESS_CODE)
+        .doesNotContainIgnoringCase(ADMIN_EMAIL)
+        .doesNotContainIgnoringCase(NORMALIZED_ADMIN_EMAIL);
   }
 
   @Test
@@ -493,7 +552,8 @@ class BootstrapAdminCommandIntegrationTest {
           LANGUAGE plpgsql
           AS $$
           BEGIN
-              RAISE EXCEPTION 'access code insert rejected';
+              RAISE EXCEPTION 'access code insert rejected'
+                  USING DETAIL = 'Key (code)=(' || NEW.code || ') rejected';
               RETURN NEW;
           END;
           $$

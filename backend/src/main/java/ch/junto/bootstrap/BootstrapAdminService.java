@@ -148,6 +148,11 @@ public class BootstrapAdminService {
           "Refusing to bootstrap: that code already exists as a personal invite code. "
               + "Choose a different initial access code.");
     }
+    if (accessCodeService.exists(normalizedCode)) {
+      throw new BootstrapAbortedException(
+          "Refusing to bootstrap: that code already exists as a shared access code. "
+              + "Choose a different initial access code.");
+    }
 
     AccessCode created =
         accessCodeService.create(normalizedCode, AccessCodeService.BOOTSTRAP_LABEL, administrator);
