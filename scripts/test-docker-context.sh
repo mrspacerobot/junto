@@ -32,11 +32,13 @@ cp "$repository_root/Dockerfile" "$context/Dockerfile"
 mkdir -p \
   "$context/frontend/node_modules/audit-dependency" \
   "$context/frontend/dist" \
+  "$context/frontend/src/api/generated" \
   "$context/backend/build/classes" \
   "$context/backend/.gradle/caches" \
   "$context/.git"
 printf 'forbidden\n' >"$context/frontend/node_modules/audit-dependency/index.js"
 printf 'forbidden\n' >"$context/frontend/dist/audit-bundle.js"
+printf 'forbidden\n' >"$context/frontend/src/api/generated/sdk.gen.ts"
 printf 'forbidden\n' >"$context/frontend/.env.production.local"
 printf 'forbidden\n' >"$context/backend/build/classes/Audit.class"
 printf 'forbidden\n' >"$context/backend/.gradle/caches/audit.bin"

@@ -33,8 +33,9 @@ IFS=/ read -r platform_os platform_arch platform_variant platform_extra <<<"$pla
 [ -n "$platform_os" ] && [ -n "$platform_arch" ] && [ -z "${platform_extra:-}" ] || \
   fail "platform must have os/architecture[/variant] form"
 
-build_oci_archive() {
+build_image_archive() {
   local destination="$1"
+  local metadata="$2"
   docker buildx build \
     --pull \
     --no-cache \
@@ -42,43 +43,45 @@ build_oci_archive() {
     --provenance=false \
     --build-arg "SOURCE_DATE_EPOCH=$source_date_epoch" \
     --tag "$image" \
-    --output "type=oci,dest=$destination" \
+    --metadata-file "$metadata" \
+    --output "type=docker,dest=$destination" \
     "$repository_root"
 }
 
 platform_manifest_digest() {
-  local archive="$1"
-  python3 - "$archive" "$platform_os" "$platform_arch" "${platform_variant:-}" <<'PY'
+  local metadata_file="$1"
+  python3 - "$metadata_file" <<'PY'
 import json
+import re
 import sys
-import tarfile
 
-archive, wanted_os, wanted_arch, wanted_variant = sys.argv[1:]
-with tarfile.open(archive) as tf:
-    index = json.load(tf.extractfile("index.json"))
-    candidates = []
-    for m in index.get("manifests", []):
-        p = m.get("platform", {})
-        if p.get("os") == wanted_os and p.get("architecture") == wanted_arch:
-            if not wanted_variant or p.get("variant", "") == wanted_variant:
-                candidates.append(m["digest"])
-    if len(candidates) != 1:
-        raise SystemExit(
-            f"expected exactly one {wanted_os}/{wanted_arch} manifest in "
-            f"index.json, found {len(candidates)}"
-        )
-    print(candidates[0])
+with open(sys.argv[1], encoding="utf-8") as source:
+    metadata = json.load(source)
+
+digest = metadata.get("containerimage.digest")
+descriptor = metadata.get("containerimage.descriptor", {})
+manifest_media_types = {
+    "application/vnd.docker.distribution.manifest.v2+json",
+    "application/vnd.oci.image.manifest.v1+json",
+}
+if not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+    raise SystemExit("build metadata did not contain a sha256 image digest")
+if descriptor.get("digest") != digest:
+    raise SystemExit("build metadata descriptor and image digests differ")
+if descriptor.get("mediaType") not in manifest_media_types:
+    raise SystemExit("build metadata does not describe a single-platform manifest")
+print(digest)
 PY
 }
 
-build_oci_archive "$tmpdir/first.tar"
-digest="$(platform_manifest_digest "$tmpdir/first.tar")"
+build_image_archive "$tmpdir/first.tar" "$tmpdir/first.json"
+digest="$(platform_manifest_digest "$tmpdir/first.json")"
 
 # The reproducibility assertion doubles the cost of this job, so it runs where a
 # regression must be caught: on master and on pull requests.
 if [ "$assert_reproducible" = true ]; then
-  build_oci_archive "$tmpdir/second.tar"
-  second_digest="$(platform_manifest_digest "$tmpdir/second.tar")"
+  build_image_archive "$tmpdir/second.tar" "$tmpdir/second.json"
+  second_digest="$(platform_manifest_digest "$tmpdir/second.json")"
   [ "$digest" = "$second_digest" ] || \
     fail "same-commit platform manifests differ: $digest != $second_digest"
 fi

@@ -25,6 +25,7 @@
 
 # Re-exclusions that must win over the allowlist above: tests, non-production
 # Spring profile fixtures and migrations, and local dotenv credentials.
+frontend/src/api/generated/
 **/*.spec.*
 **/*.test.*
 backend/src/main/resources/application-dev.yml

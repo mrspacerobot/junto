@@ -23,6 +23,7 @@ fail() {
 for command in docker openssl python3; do
   command -v "$command" >/dev/null || fail "$command is required"
 done
+docker_command="$(command -v docker)"
 
 mkdir -p "$tmpdir/nested" "$tmpdir/deleted" "$tmpdir/history"
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
@@ -88,4 +89,22 @@ grep -q 'credential-shaped ARG/ENV assignment is present in image history' "$tmp
   fail "history inspection did not identify the credential-shaped ARG"
 }
 
-printf 'verified secret scan coverage: nested archive, deleted layer, and ARG history canaries were rejected\n'
+if (
+  docker() {
+    if [ "${1:-}" = history ]; then
+      return 42
+    fi
+    "$docker_command" "$@"
+  }
+  export -f docker
+  export docker_command
+  "$repository_root/scripts/scan-image-secrets.sh" "$nested_image"
+) >"$tmpdir/result.log" 2>&1; then
+  fail "failed image history inspection was accepted"
+fi
+grep -q 'could not inspect image history' "$tmpdir/result.log" || {
+  cat "$tmpdir/result.log" >&2
+  fail "history inspection failure did not stop the secret scan"
+}
+
+printf 'verified secret scan coverage: nested archive, deleted layer, ARG history, and history failures were rejected\n'

@@ -30,8 +30,9 @@ environment="$(docker image inspect --format '{{range .Config.Env}}{{println .}}
 if printf '%s\n' "$environment" | grep -Eiq "^${credential_name}="; then
   fail "credential-shaped environment metadata is present"
 fi
-if docker history --no-trunc --format '{{.CreatedBy}}' "$image" |
-  grep -Eiq "(^|[[:space:]|])${credential_name}=[^[:space:]]"; then
+history="$(docker history --no-trunc --format '{{.CreatedBy}}' "$image")" || \
+  fail "could not inspect image history: $image"
+if printf '%s\n' "$history" | grep -Eiq "(^|[[:space:]|])${credential_name}=[^[:space:]]"; then
   fail "credential-shaped ARG/ENV assignment is present in image history"
 fi
 
