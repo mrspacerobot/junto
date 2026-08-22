@@ -62,7 +62,7 @@ EOF
 git -C "$repository_root" ls-files | LC_ALL=C sort >"$tmpdir/tracked.list"
 
 # Losing a production input fails closed: the real build stops at its COPY. Only
-# the fail-open direction needs a test, and it has exactly two shapes.
+# the fail-open direction needs a test.
 
 # 1. Nothing untracked may enter. One comparison covers every dependency, build
 #    output, tooling cache, VCS directory, and local dotenv credential.
@@ -72,11 +72,19 @@ untracked="$(LC_ALL=C comm -23 "$tmpdir/actual.list" "$tmpdir/tracked.list")"
   fail "untracked paths entered the context"
 }
 
-# 2. Tracked but non-production categories must stay out too.
-non_production='(^|/)(src/test|e2e)/|\.(spec|test)\.[^/]+$|(^|/)application-(dev|openapi|test)\.yml$|(^|/)db/migration-dev/'
+# 2. Tracked paths must be local inputs copied by Dockerfile.
+production_inputs='^Dockerfile$|^docs/openapi\.json$|^frontend/(package(-lock)?\.json|index\.html|openapi-ts\.config\.ts|postcss\.config\.js|tailwind\.config\.js|vite\.config\.ts|tsconfig(\.app|\.node)?\.json|public/.+|src/.+)$|^backend/(build\.gradle|settings\.gradle|gradlew|gradle/.+|src/main/.+)$'
+outside_production_inputs="$(grep -Ev "$production_inputs" "$tmpdir/actual.list" || true)"
+[ -z "$outside_production_inputs" ] || {
+  printf '%s\n' "$outside_production_inputs" >&2
+  fail "tracked paths outside Dockerfile inputs entered the context"
+}
+
+# 3. Non-production paths inside copied source trees must stay out too.
+non_production='(^|/)(src/test|e2e)/|^frontend/src/api/generated/|\.(spec|test)\.[^/]+$|(^|/)application-(dev|openapi|test)\.yml$|(^|/)db/migration-dev/|(^|/)\.env(\..*)?$'
 if grep -Eq "$non_production" "$tmpdir/actual.list"; then
   grep -E "$non_production" "$tmpdir/actual.list" >&2
-  fail "tests, non-production profiles, or development migrations entered the context"
+  fail "generated code, tests, local secrets, or non-production resources entered the context"
 fi
 
 printf 'verified Docker context: %s tracked production files; dependencies, build output, tests, and local secrets excluded\n' \
