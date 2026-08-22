@@ -299,14 +299,16 @@ class BootstrapAdminCommandIntegrationTest {
   }
 
   @Test
-  @DisplayName("refuses an access code that could not be typed unambiguously")
-  void refusesAnUnusableAccessCode() throws Exception {
+  @DisplayName("refuses access codes and administrator identities that cannot be used")
+  void refusesUnusableInputs() throws Exception {
     migrate();
 
     assertThat(bootstrap(ADMIN_EMAIL, "short")).isEqualTo(BootstrapAdminCommand.FAILED);
     assertThat(bootstrap(ADMIN_EMAIL, "junto pilot code")).isEqualTo(BootstrapAdminCommand.FAILED);
     assertThat(bootstrap("not-an-email", ACCESS_CODE)).isEqualTo(BootstrapAdminCommand.FAILED);
     assertThat(bootstrap("a".repeat(65) + "@junto.example", ACCESS_CODE))
+        .isEqualTo(BootstrapAdminCommand.FAILED);
+    assertThat(bootstrap("\"captain one\"@junto.example", ACCESS_CODE))
         .isEqualTo(BootstrapAdminCommand.FAILED);
 
     try (Connection connection = connection()) {

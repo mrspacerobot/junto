@@ -29,7 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class BootstrapAdminService {
 
   private static final Logger log = LoggerFactory.getLogger(BootstrapAdminService.class);
-  private static final int MAX_EMAIL_LENGTH = 255;
   private static final int MINIMUM_ADMIN_INVITE_QUOTA = 1;
   private static final String ADMIN_DISPLAY_NAME = "Administrator";
 
@@ -68,9 +67,7 @@ public class BootstrapAdminService {
   }
 
   private void validate(String normalizedEmail, String normalizedCode) {
-    if (normalizedEmail == null
-        || normalizedEmail.length() > MAX_EMAIL_LENGTH
-        || !validator.validate(new AdministratorIdentity(normalizedEmail)).isEmpty()) {
+    if (!validator.validate(new AdministratorIdentity(normalizedEmail)).isEmpty()) {
       throw new BootstrapAbortedException(
           "Refusing to bootstrap: the administrator address is not a valid email address.");
     }
