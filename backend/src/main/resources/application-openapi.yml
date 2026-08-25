@@ -1,3 +1,8 @@
+server:
+  # The OpenAPI Gradle task scrapes a fixed http://localhost:8080, so this
+  # profile pins the port instead of reading an injected PORT.
+  port: 8080
+
 spring:
   jpa:
     hibernate:

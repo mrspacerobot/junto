@@ -1,3 +1,17 @@
+server:
+  # Providers inject the listen port; 8080 is the local default.
+  port: ${PORT:8080}
+  address: 0.0.0.0
+  forward-headers-strategy: none
+  servlet:
+    session:
+      cookie:
+        # Spring Session issues this cookie, not JSESSIONID. Logout deletion in
+        # SecurityConfig reads the name from here.
+        name: SESSION
+        http-only: true
+        same-site: lax
+
 spring:
   application:
     name: junto

@@ -6,6 +6,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Formatting is enforced in CI: `./gradlew spotlessApply|spotlessCheck` (backend) and `npm run format|format:check` (frontend). Keep mechanical reformats in their own commits.
 - Authentication intent is explicit: `/api/auth/request-code` is enumeration-safe sign-in, while `/api/auth/signup/request-code` validates the invite independently of account existence. Preserve this split; see `AuthService` and `AuthIntegrationTest`.
 - Auth-code replacement in `AuthCodeService` intentionally uses `PostgresAuthTokenIssuanceLock` plus the partial unique index as the final invariant; see `AuthConcurrencyIntegrationTest`.
+- `X-Forwarded-*` is trusted only by the `prod` profile, and the client address that `AuthRateLimiter` limits on comes from Tomcat's `RemoteIpValve`. Never widen that trust to shared configuration or switch to the `framework` strategy; see the production runtime section of `README.md` and `ch.junto.core.config` tests.
 
 ## Maintaining this file
 

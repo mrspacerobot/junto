@@ -1,3 +1,16 @@
+server:
+  # Render terminates TLS and rewrites X-Forwarded-* at its proxy, so forwarding
+  # headers are trusted here and nowhere else. The native strategy uses Tomcat's
+  # RemoteIpValve, which resolves the client address from the right of
+  # X-Forwarded-For and therefore ignores any prefix a caller supplies itself.
+  forward-headers-strategy: native
+  # Render sends SIGTERM and follows with SIGKILL after 30s; finish inside that.
+  shutdown: graceful
+  servlet:
+    session:
+      cookie:
+        secure: true
+
 spring:
   datasource:
     url: jdbc:postgresql://${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}
@@ -8,6 +21,8 @@ spring:
       minimum-idle: 2
       connection-timeout: 20000
       idle-timeout: 300000
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   mail:
     host: smtp.resend.com
     port: 587

@@ -1135,7 +1135,6 @@ These are positives:
 - invite code carried through token rather than trusting later client input
 - transactional service methods
 - Spring Security authorization rules are fairly tight
-- logout clears `JSESSIONID`
 
 ---
 
