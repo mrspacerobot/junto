@@ -159,6 +159,11 @@ Open <http://localhost:8080>. Stop with `docker stop junto`; Docker sends
 `SIGTERM` directly to Java so Spring can finish its graceful shutdown, then
 remove the stopped container with `docker rm junto`.
 
+CI publishes this image as an immutable release candidate and promotes it to
+production through a separate, manually approved workflow. The candidate and
+promotion contract, the approval gate, and the rollback boundary are in
+[`docs/operations/release-and-promotion.md`](docs/operations/release-and-promotion.md).
+
 ## Verification
 
 ```bash
@@ -178,6 +183,9 @@ OPENAPI_DATABASE_USER=junto OPENAPI_DATABASE_PASSWORD=junto \
 ./gradlew generateOpenApiDocs
 cd ../frontend && npm run generate-api
 ```
+
+Commit the regenerated contract: CI regenerates `docs/openapi.json` and fails
+when the committed document differs.
 
 ## Production SPA packaging and routing
 
