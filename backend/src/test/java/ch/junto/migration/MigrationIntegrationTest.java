@@ -47,6 +47,9 @@ class MigrationIntegrationTest {
       assertThat(tableExists(connection, "spring_session")).isTrue();
       assertThat(tableExists(connection, "auth_rate_limits")).isTrue();
       assertThat(tableExists(connection, "chat_rate_limits")).isTrue();
+      assertThat(tableExists(connection, "access_codes")).isTrue();
+      assertThat(tableExists(connection, "access_code_redemptions")).isTrue();
+      assertThat(columnLength(connection, "auth_tokens", "invite_code")).isEqualTo(64);
       assertThat(
               queryLong(
                   connection,
@@ -56,7 +59,7 @@ class MigrationIntegrationTest {
               queryString(
                   connection,
                   "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank DESC LIMIT 1"))
-          .isIn("19", "019");
+          .isIn("20", "020");
     }
   }
 
@@ -132,6 +135,8 @@ class MigrationIntegrationTest {
           .isZero();
       assertThat(queryLong(connection, "SELECT count(*) FROM spring_session")).isZero();
       assertThat(columnExists(connection, "auth_tokens", "invite_code")).isTrue();
+      assertThat(columnLength(connection, "auth_tokens", "invite_code")).isEqualTo(64);
+      assertThat(tableExists(connection, "access_codes")).isTrue();
     }
   }
 
@@ -209,6 +214,22 @@ class MigrationIntegrationTest {
       try (ResultSet result = statement.executeQuery()) {
         result.next();
         return result.getBoolean(1);
+      }
+    }
+  }
+
+  private long columnLength(Connection connection, String table, String column) throws Exception {
+    try (PreparedStatement statement =
+        connection.prepareStatement(
+            """
+            SELECT character_maximum_length FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = ? AND column_name = ?
+            """)) {
+      statement.setString(1, table);
+      statement.setString(2, column);
+      try (ResultSet result = statement.executeQuery()) {
+        result.next();
+        return result.getLong(1);
       }
     }
   }
