@@ -7,9 +7,7 @@ promotes that same digest. Production never rebuilds source code.
 
 The `Release candidate` workflow runs only after the `CI` workflow succeeds on
 `master`. This means the backend, frontend, end-to-end, and production-image
-jobs all finish before registry login or publication. Until the production
-container work is present, the release workflow stops before building with a
-clear missing-Dockerfile error.
+jobs all finish before registry login or publication.
 
 For every successful commit, the workflow:
 
@@ -40,13 +38,21 @@ tag all include the commit identity.
 Create a GitHub environment named `production` before the first promotion.
 Configure at least one required reviewer and prevent self-review. Under
 **Deployment branches and tags**, choose **Selected branches and tags** and add
-only the `master` branch. Do not add a tag rule. Add:
+only the `master` branch. Do not add a tag rule, and disable administrator
+bypass of environment protection rules. Add:
 
 - environment variable `PRODUCTION_URL`, the public HTTPS application URL;
 - environment variable `RENDER_SERVICE_ID`, the ID of the image-backed Render
   web service; and
 - environment secret `RENDER_API_KEY`, a dedicated Render API key held only by
   this protected environment and an account with the minimum available access.
+
+Required reviewers on private repositories require eligible GitHub Enterprise
+hosting. Do not enable promotion on GitHub Free, Pro, or Team for this private
+repository, because those plans only offer required reviewers to public
+repositories. At runtime, the workflow verifies that the environment has at
+least one required reviewer and prevents self-review; it refuses to deploy when
+either protection is absent.
 
 The Render service must be image-backed, configured for the
 `ghcr.io/mrspacerobot/junto` image, use the production HTTP health path, have
@@ -64,7 +70,10 @@ Open Actions, choose `Promote to production`, and use **Run workflow**. Supply:
 
 - the full lowercase 40-character commit SHA of a published candidate;
 - a verified backup reference, such as a Render point-in-time recovery
-  timestamp or a logical dump identifier; and
+  timestamp or a logical dump identifier;
+- the exact image digest currently reported by Render's live deployment, or
+  `none (first production release)` when the service has no live deployment;
+  and
 - the exact confirmation `PROMOTE`.
 
 The production environment reviewer then checks the candidate release record,

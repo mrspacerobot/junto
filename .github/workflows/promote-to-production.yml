@@ -1,8 +1,8 @@
 name: Promote to production
 
 # The only path from a published candidate to production. It is manual by
-# construction: a person starts it, names the candidate and the backup it can be
-# recovered to, types the confirmation, and a reviewer on the `production`
+# construction: a person starts it, names the candidate, backup, and expected
+# rollback target, types the confirmation, and a reviewer on the `production`
 # environment approves before any step runs.
 #
 # The `prod` tag is the record of what production runs. It moves to a candidate
@@ -20,11 +20,15 @@ on:
       backup_reference:
         description: Verified backup this release can be recovered to (for example a Render PITR timestamp or a logical dump identifier).
         required: true
+      expected_rollback_target:
+        description: Current live Render image digest, or "none (first production release)" when no live deployment exists.
+        required: true
       confirm:
         description: Type PROMOTE to confirm this changes production.
         required: true
 
 permissions:
+  actions: read
   contents: write
   packages: write
 
@@ -44,10 +48,27 @@ jobs:
       name: production
       url: ${{ vars.PRODUCTION_URL }}
     steps:
+      - name: Require protected production approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          environment="$(gh api "repos/$GITHUB_REPOSITORY/environments/production")"
+          reviewer_count="$(echo "$environment" | jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length')"
+          prevent_self_review="$(echo "$environment" | jq -r '[.protection_rules[]? | select(.type == "required_reviewers")][0].prevent_self_review // false')"
+          [ "$reviewer_count" -gt 0 ] || {
+            echo "The production environment has no required reviewer protection rule." >&2
+            exit 1
+          }
+          [ "$prevent_self_review" = true ] || {
+            echo "The production environment must prevent self-review." >&2
+            exit 1
+          }
+
       - name: Confirm the operator means production
         env:
           CONFIRMATION: ${{ inputs.confirm }}
           CANDIDATE_COMMIT: ${{ inputs.commit }}
+          EXPECTED_ROLLBACK_TARGET: ${{ inputs.expected_rollback_target }}
         run: |
           if [ "$CONFIRMATION" != "PROMOTE" ]; then
             echo "Confirmation was not PROMOTE. Nothing was changed." >&2
@@ -55,6 +76,11 @@ jobs:
           fi
           if ! [[ "$CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo "The candidate commit must be a full lowercase commit SHA." >&2
+            exit 1
+          fi
+          if [ "$EXPECTED_ROLLBACK_TARGET" != "none (first production release)" ] &&
+             ! [[ "$EXPECTED_ROLLBACK_TARGET" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "The expected rollback target must be a full image digest or the first-release marker." >&2
             exit 1
           fi
 
@@ -68,7 +94,7 @@ jobs:
           test -n "$RENDER_SERVICE_ID" || { echo "The production environment has no RENDER_SERVICE_ID variable." >&2; exit 1; }
           test -n "$RENDER_API_KEY" || { echo "The production environment has no RENDER_API_KEY secret." >&2; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ inputs.commit }}
 
@@ -78,19 +104,16 @@ jobs:
         run: ./scripts/render-release-record.sh validate-backup
 
       - name: Sign in to the container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve the candidate and the version it replaces
+      - name: Resolve the published candidate
         id: candidate
         env:
           CANDIDATE_COMMIT: ${{ inputs.commit }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
         run: |
           candidate_tag="$IMAGE_NAME:sha-$CANDIDATE_COMMIT"
           if ! digest="$(docker buildx imagetools inspect "$candidate_tag" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
@@ -98,18 +121,9 @@ jobs:
             exit 1
           fi
 
-          # The most recent live Render deployment is the actual rollback
-          # target. A registry tag alone cannot prove what is serving traffic.
-          live_deploys="$(curl --fail --silent --show-error \
-            --header "Authorization: Bearer $RENDER_API_KEY" \
-            --header 'Accept: application/json' \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?status=live&limit=1")"
-          previous="$(echo "$live_deploys" | jq -r '.[0].deploy.image.sha // "none (first production release)"')"
-
           {
             echo "tag=$candidate_tag"
             echo "digest=$digest"
-            echo "previous=$previous"
           } >> "$GITHUB_OUTPUT"
 
       - name: Read the candidate's recorded identity
@@ -126,10 +140,10 @@ jobs:
           schema_version="$(echo "$labels" | jq -r '."ch.junto.schema.version" // ""')"
           config_version="$(echo "$labels" | jq -r '."ch.junto.config.version" // ""')"
           [ "$revision" = "$CANDIDATE_COMMIT" ] || { echo "The candidate image records revision '$revision', not '$CANDIDATE_COMMIT'." >&2; exit 1; }
-          [ -n "$version" ] && [ -n "$schema_version" ] && [ -n "$config_version" ] || {
+          if [ -z "$version" ] || [ -z "$schema_version" ] || [ -z "$config_version" ]; then
             echo "The candidate image is missing application, schema, or configuration identity." >&2
             exit 1
-          }
+          fi
           release_tag="v${version}-${CANDIDATE_COMMIT:0:7}"
           release="$(gh release view "$release_tag" --json body,isDraft,targetCommitish)" || {
             echo "No candidate release record exists at $release_tag." >&2
@@ -159,6 +173,29 @@ jobs:
             echo "config_version=$config_version"
             echo "release_tag=$release_tag"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Verify the expected rollback target is currently live
+        id: rollback
+        env:
+          EXPECTED_ROLLBACK_TARGET: ${{ inputs.expected_rollback_target }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+        run: |
+          live_deploys="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --header 'Accept: application/json' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?status=live&limit=1")"
+          echo "$live_deploys" | jq -e 'type == "array"' >/dev/null
+          if [ "$(echo "$live_deploys" | jq length)" -eq 0 ]; then
+            live_target="none (first production release)"
+          else
+            live_target="$(echo "$live_deploys" | jq -er '.[0].deploy.image.sha | select(type == "string" and test("^sha256:[0-9a-f]{64}$"))')"
+          fi
+          [ "$live_target" = "$EXPECTED_ROLLBACK_TARGET" ] || {
+            echo "Production currently runs '$live_target', not expected rollback target '$EXPECTED_ROLLBACK_TARGET'." >&2
+            exit 1
+          }
+          echo "target=$live_target" >> "$GITHUB_OUTPUT"
 
       - name: Deploy the exact candidate digest and wait for Render's health gate
         id: deploy
@@ -212,7 +249,7 @@ jobs:
           }
 
           cancel_and_wait() {
-            local cancel_attempt deployed_digest deployment id status
+            local deployed_digest deployment id status
             id="$1"
             deployment="$(retrieve_deploy "$id" 2>/dev/null || true)"
             status="$(echo "$deployment" | jq -r '.status // empty' 2>/dev/null || true)"
@@ -240,7 +277,7 @@ jobs:
               echo "Render did not immediately accept cancellation for deploy $id; checking its terminal state." >&2
             fi
 
-            for cancel_attempt in $(seq 1 20); do
+            for _ in $(seq 1 20); do
               sleep 3
               if ! deployment="$(retrieve_deploy "$id")"; then
                 continue
@@ -282,8 +319,7 @@ jobs:
             set +e
             ids="$deploy_id"
             if [ -z "$ids" ]; then
-              matches="$(recover_candidate_deploys)"
-              if [ $? -eq 0 ]; then
+              if matches="$(recover_candidate_deploys)"; then
                 ids="$(echo "$matches" | jq -r '.[].id')"
               fi
             fi
@@ -413,8 +449,8 @@ jobs:
           APP_VERSION: ${{ steps.identity.outputs.version }}
           SCHEMA_VERSION: ${{ steps.identity.outputs.schema_version }}
           CONFIG_VERSION: ${{ steps.identity.outputs.config_version }}
-          ROLLBACK_TARGET: ${{ steps.candidate.outputs.previous }}
-          PREVIOUS_PRODUCTION_DIGEST: ${{ steps.candidate.outputs.previous }}
+          ROLLBACK_TARGET: ${{ steps.rollback.outputs.target }}
+          PREVIOUS_PRODUCTION_DIGEST: ${{ steps.rollback.outputs.target }}
           BACKUP_REFERENCE: ${{ inputs.backup_reference }}
           PROMOTED_BY: ${{ github.actor }}
           HEALTH_CHECK_RESULT: ${{ steps.deploy.outputs.result }}
@@ -434,13 +470,15 @@ jobs:
         env:
           PRODUCTION_TAG_MOVED: ${{ steps.production_tag.outputs.moved }}
         run: |
-          echo "### Promotion did not complete" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$PRODUCTION_TAG_MOVED" = true ]; then
-            echo "The candidate reached Render and the \`prod\` tag moved, but recording the promotion failed." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "The \`prod\` tag was not moved." >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "The prior image remains available at \`${{ steps.candidate.outputs.previous }}\`." >> "$GITHUB_STEP_SUMMARY"
-          echo "If Render did not report the candidate live, its health gate kept the prior deployment serving. If a later bookkeeping step failed, redeploy the rollback target through this workflow." >> "$GITHUB_STEP_SUMMARY"
-          echo "The candidate \`${{ steps.identity.outputs.digest }}\` remains published and can be promoted again once the cause is understood." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Promotion did not complete"
+            echo ""
+            if [ "$PRODUCTION_TAG_MOVED" = true ]; then
+              echo "The candidate reached Render and the \`prod\` tag moved, but recording the promotion failed."
+            else
+              echo "The \`prod\` tag was not moved."
+            fi
+            echo "The prior image remains available at \`${{ steps.rollback.outputs.target }}\`."
+            echo "If Render did not report the candidate live, its health gate kept the prior deployment serving. If a later bookkeeping step failed, redeploy the rollback target through this workflow."
+            echo "The candidate \`${{ steps.identity.outputs.digest }}\` remains published and can be promoted again once the cause is understood."
+          } >> "$GITHUB_STEP_SUMMARY"
