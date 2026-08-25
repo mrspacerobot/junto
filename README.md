@@ -125,6 +125,9 @@ reactivates the matching existing account, ensuring that it can issue at least o
 A retry with the same normalized administrator identity and access code makes no changes; a
 different identity or code is refused.
 
+The bootstrapped administrator then signs in through the normal passwordless login and issues
+personal invites from there.
+
 The initial access code is reusable and has no expiry during the invite-only pilot. Every admitted
 account is recorded separately. Revocation is an operator action that preserves those records:
 
