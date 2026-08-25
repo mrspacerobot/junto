@@ -21,6 +21,12 @@ app:
   security:
     csrf:
       enabled: false
+springdoc:
+  # Jackson discovers getter-only properties (for example InviteCode.isUsed) in
+  # unspecified reflection order, so the emitted document otherwise varies between
+  # machines and fails the committed-contract check. Sorting every generated key
+  # makes the contract byte-reproducible.
+  writer-with-order-by-keys: true
 logging:
   level:
     org.hibernate.SQL: WARN
