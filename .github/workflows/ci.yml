@@ -101,6 +101,45 @@ jobs:
           npm run test:unit
           npm run build
 
+  production-image:
+    needs: backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download generated OpenAPI contract
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-spec
+          path: docs
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verify the effective production context allowlist
+        run: ./scripts/test-docker-context.sh
+
+      - name: Build the production artifact, asserting reproducibility on master and pull requests
+        env:
+          ASSERT_REPRODUCIBLE: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/master' }}
+        run: |
+          source_date_epoch="$(git show -s --format=%ct HEAD)"
+          arguments=(junto:ci linux/amd64 "$source_date_epoch")
+          if [ "$ASSERT_REPRODUCIBLE" = true ]; then
+            arguments+=(--assert-reproducible)
+          fi
+          ./scripts/build-production-image.sh "${arguments[@]}"
+
+      - name: Verify image contents, startup, and graceful shutdown
+        run: ./scripts/verify-image.sh junto:ci
+
+      - name: Scan every image layer and the nested application archive for secrets
+        run: ./scripts/scan-image-secrets.sh junto:ci
+
+      - name: Prove secret scan and history-inspection coverage with canaries
+        run: ./scripts/test-image-secret-scan.sh
+
   e2e:
     needs: [backend, frontend]
     runs-on: ubuntu-latest

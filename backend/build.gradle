@@ -121,6 +121,12 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+tasks.named('bootJar') {
+    archiveFileName = 'junto.jar'
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
 openApi {
     apiDocsUrl.set("http://localhost:8080/v3/api-docs")
     outputDir.set(file("../docs"))

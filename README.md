@@ -117,6 +117,52 @@ cd backend && ./gradlew spotlessCheck
 cd frontend && npm run format:check
 ```
 
+## Production container
+
+Build the pinned, multi-stage artifact from the checked-in OpenAPI contract at
+the repository root:
+
+```bash
+source_date_epoch="$(git show -s --format=%ct HEAD)"
+docker build --pull \
+  --build-arg SOURCE_DATE_EPOCH="$source_date_epoch" \
+  --tag junto:local .
+./scripts/verify-image.sh junto:local
+./scripts/scan-image-secrets.sh junto:local
+```
+
+CI first replaces the checked-in contract with the schema-generated OpenAPI
+artifact described under [Verification](#verification). On master and on pull
+requests, it additionally builds twice without cache for one fixed platform and
+compares the runtime platform manifests, then hands that verified artifact to
+the remaining checks. Provenance is disabled for the equality check because
+per-build attestations can legitimately change the outer image index. Other
+branch pushes covered by the workflow build once and skip only the comparison.
+
+The image serves the compiled Vue application and Spring Boot API together on
+port 8080 and activates the `prod` profile by default. It needs an external
+PostgreSQL/PostGIS database, the public application URL, and a Resend API key.
+For a local production-profile run using the Compose database:
+
+```bash
+docker compose up -d --wait postgres
+: "${RESEND_API_KEY:?set RESEND_API_KEY first}"
+docker run --detach --name junto --publish 8080:8080 \
+  --add-host host.docker.internal:host-gateway \
+  --env DATABASE_HOST=host.docker.internal \
+  --env DATABASE_PORT=5432 \
+  --env DATABASE_NAME=junto \
+  --env DATABASE_USERNAME=junto \
+  --env DATABASE_PASSWORD=junto \
+  --env APP_BASE_URL='http://localhost:8080' \
+  --env RESEND_API_KEY \
+  junto:local
+```
+
+Open <http://localhost:8080>. Stop with `docker stop junto`; Docker sends
+`SIGTERM` directly to Java so Spring can finish its graceful shutdown, then
+remove the stopped container with `docker rm junto`.
+
 ## Verification
 
 ```bash
