@@ -38,7 +38,7 @@ class SpaRoutingIntegrationTest extends BaseIntegrationTest {
       strings = {
         "/",
         "/auth/login",
-        "/auth/verify?token=example",
+        "/auth/verify",
         "/activities",
         "/activities/2af4dce8-b431-4f6b-94b0-0c193b0a6d40",
         "/messages/2af4dce8-b431-4f6b-94b0-0c193b0a6d40",
