@@ -8,7 +8,7 @@ plugins {
 }
 
 group = 'ch.junto'
-version = '0.0.1-SNAPSHOT'
+version = '0.1.0'
 
 java {
     toolchain {
@@ -117,8 +117,137 @@ tasks.named('processResources') {
     }
 }
 
+// --- Release identity -------------------------------------------------------
+// Every value below is derived from committed sources alone, so the same commit
+// always yields the same identity whether the build runs in CI or inside the
+// production image build (which receives no .git directory). The commit itself
+// is therefore carried by the image tag and OCI labels rather than by the JAR;
+// see docs/operations/release-and-promotion.md.
+
+def migrationDirectory = file('src/main/resources/db/migration')
+
+// The configuration inputs whose content defines the release's configuration
+// version. Add a file here when it becomes part of the production configuration
+// contract; a change to any of them produces a new configuration version.
+def productionConfigurationFiles = [
+    file('src/main/resources/application.yml'),
+    file('src/main/resources/application-prod.yml'),
+]
+
+def flywaySchemaVersion = {
+    def migrations = migrationDirectory.listFiles()
+    if (migrations == null) {
+        throw new GradleException("No Flyway migration directory at ${migrationDirectory}")
+    }
+    def versions = migrations
+        .collect { (it.name =~ /^V(\d+(?:[._]\d+)*)__/) }
+        .findAll { it.find() }
+        .collect { version ->
+            version.group(1).tokenize('._')*.toInteger().join('.')
+        }
+    if (versions.isEmpty()) {
+        throw new GradleException("No Flyway migrations found in ${migrationDirectory}")
+    }
+    versions.max { left, right ->
+        def leftParts = left.tokenize('.')*.toInteger()
+        def rightParts = right.tokenize('.')*.toInteger()
+        def width = Math.max(leftParts.size(), rightParts.size())
+        for (int index = 0; index < width; index++) {
+            def comparison = (leftParts[index] ?: 0) <=> (rightParts[index] ?: 0)
+            if (comparison != 0) {
+                return comparison
+            }
+        }
+        0
+    }
+}()
+
+def productionConfigurationVersion = {
+    def digest = java.security.MessageDigest.getInstance('SHA-256')
+    productionConfigurationFiles.sort { it.name }.each { configurationFile ->
+        if (!configurationFile.isFile()) {
+            throw new GradleException("Production configuration input is missing: ${configurationFile}")
+        }
+        digest.update("${configurationFile.name}\n".getBytes('UTF-8'))
+        digest.update(configurationFile.bytes)
+    }
+    digest.digest().encodeHex().toString().substring(0, 12)
+}()
+
+springBoot {
+    buildInfo {
+        // A build timestamp would make two builds of one commit differ and
+        // defeat the reproducible production image.
+        excludes = ['time']
+        properties {
+            additional = [
+                'schema.version': flywaySchemaVersion,
+                'config.version': productionConfigurationVersion,
+            ]
+        }
+    }
+}
+
+tasks.register('releaseMetadata') {
+    description = 'Prints the deterministic release identity of the current sources as JSON.'
+    group = 'build'
+    def metadata = [
+        version: project.version.toString(),
+        schemaVersion: flywaySchemaVersion,
+        configVersion: productionConfigurationVersion,
+    ]
+    doLast {
+        println groovy.json.JsonOutput.toJson(metadata)
+    }
+}
+
+// The packaged archive is a production artifact: development and test-only
+// profiles, seed migrations, and profile-gated bypass endpoints never enter it.
+// Local development and the end-to-end suite run through `bootRun`, which uses
+// the compiled classes rather than this archive, so they are unaffected.
+def developmentOnlyResourcePatterns = [
+    '**/application-dev.yml',
+    '**/application-openapi.yml',
+    '**/application-test.yml',
+    '**/db/migration-dev/**',
+]
+
+def developmentProfileClassPrefixes = providers.provider {
+    fileTree('src/main/java') { include '**/*.java' }
+        .filter { it.text.contains('@Profile("dev")') }
+        .collect {
+            def relativePath = file('src/main/java').toPath().relativize(it.toPath()).toString()
+            relativePath.replace(File.separator, '/') - ~/\.java$/
+        }
+}
+
+tasks.named('bootJar') {
+    exclude developmentOnlyResourcePatterns
+    def excludedClassPrefixes = developmentProfileClassPrefixes
+    exclude { element ->
+        excludedClassPrefixes.get().any { prefix ->
+            element.path.endsWith("${prefix}.class") || element.path.contains("${prefix}\$")
+        }
+    }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+tasks.named('bootJar') {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+// When building inside Docker, front-end assets arrive from a separate build
+// stage; skip the Spring Boot auto-frontend tasks that require npm on PATH.
+if (project.hasProperty('skipFrontend')) {
+    tasks.configureEach {
+        if (name.startsWith('frontend') || name == 'syncFrontend') {
+            enabled = false
+        }
+    }
 }
 
 openApi {

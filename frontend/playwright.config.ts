@@ -1,5 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
+const backendPort = Number(process.env.E2E_BACKEND_PORT ?? 8080);
+const backendUrl = `http://localhost:${backendPort}`;
+const frontendPort = Number(process.env.E2E_FRONTEND_PORT ?? 5173);
+const frontendUrl = `http://localhost:${frontendPort}`;
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 60_000,
@@ -8,20 +13,25 @@ export default defineConfig({
     {
       command: './gradlew bootRun --args="--spring.profiles.active=dev"',
       cwd: '../backend',
-      url: 'http://localhost:8080/v3/api-docs',
+      url: `${backendUrl}/v3/api-docs`,
       timeout: 120_000,
       reuseExistingServer: !process.env.CI,
+      env: {
+        SERVER_PORT: String(backendPort),
+        APP_ALLOWED_ORIGIN: frontendUrl,
+        APP_BASE_URL: frontendUrl,
+      },
     },
     {
-      command: 'npm run dev -- --host 127.0.0.1',
+      command: `npm run dev -- --host 127.0.0.1 --port ${frontendPort} --strictPort`,
       cwd: '.',
-      url: 'http://localhost:5173/auth/login',
+      url: `${frontendUrl}/auth/login`,
       timeout: 60_000,
       reuseExistingServer: !process.env.CI,
     },
   ],
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: frontendUrl,
     viewport: { width: 1280, height: 900 },
     screenshot: 'only-on-failure',
   },

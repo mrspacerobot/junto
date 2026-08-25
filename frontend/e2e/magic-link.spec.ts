@@ -95,7 +95,7 @@ test('existing-account sign-in remains invite-free through real email and magic 
 
   await expect(page.getByText(`If an account exists for ${email}`)).toBeVisible();
   const text = await waitForAuthEmail(request, email);
-  const magicLink = text.match(/http:\/\/localhost:5173\/auth\/verify#token=[^\s]+/)?.[0];
+  const magicLink = text.match(/https?:\/\/[^\s]+\/auth\/verify#token=[^\s]+/)?.[0];
   expect(magicLink).toBeTruthy();
 
   const token = new URL(magicLink!).hash.slice('#token='.length);

@@ -1,0 +1,270 @@
+name: Release candidate
+
+# Publishes an immutable release candidate for a commit that has already passed
+# every existing check. `workflow_run` is what enforces that ordering: this
+# workflow starts only once CI as a whole concluded successfully for the commit,
+# so backend, frontend, end-to-end, and production-image checks are all complete
+# before anything is published.
+#
+# Publishing is not deploying. Promotion to production is manual and explicitly
+# approved; see promote-to-production.yml and
+# docs/operations/release-and-promotion.md.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-candidate-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  publish-candidate:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Require the production image definition
+        run: |
+          test -f Dockerfile || {
+            echo "No Dockerfile in this commit. The production container (issue #13) must land before a release candidate can be published." >&2
+            exit 1
+          }
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: gradle
+
+      - name: Resolve the release identity of this commit
+        id: identity
+        working-directory: backend
+        run: |
+          metadata="$(./gradlew -q releaseMetadata --no-daemon --console=plain | grep -m1 '^{')"
+          commit="${{ github.event.workflow_run.head_sha }}"
+          version="$(echo "$metadata" | jq -r '.version')"
+          {
+            echo "commit=$commit"
+            echo "short_commit=${commit:0:7}"
+            echo "version=$version"
+            echo "schema_version=$(echo "$metadata" | jq -r '.schemaVersion')"
+            echo "config_version=$(echo "$metadata" | jq -r '.configVersion')"
+            echo "release_tag=v${version}-${commit:0:7}"
+            echo "source_date_epoch=$(git show -s --format=%ct "$commit")"
+            echo "created=$(git show -s --format=%cI "$commit")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Build the release candidate image
+        env:
+          IDENTITY_TAG: ${{ env.IMAGE_NAME }}:sha-${{ steps.identity.outputs.commit }}
+        run: |
+          # Every label value is derived from the commit, so rebuilding this
+          # commit produces the same image rather than a new one.
+          docker buildx build \
+            --platform linux/amd64 \
+            --load \
+            --build-arg "SOURCE_DATE_EPOCH=${{ steps.identity.outputs.source_date_epoch }}" \
+            --label "org.opencontainers.image.revision=${{ steps.identity.outputs.commit }}" \
+            --label "org.opencontainers.image.version=${{ steps.identity.outputs.version }}" \
+            --label "org.opencontainers.image.created=${{ steps.identity.outputs.created }}" \
+            --label "ch.junto.schema.version=${{ steps.identity.outputs.schema_version }}" \
+            --label "ch.junto.config.version=${{ steps.identity.outputs.config_version }}" \
+            --tag "$IDENTITY_TAG" \
+            .
+
+      - name: Verify the packaged artifact inside the image
+        env:
+          IDENTITY_TAG: ${{ env.IMAGE_NAME }}:sha-${{ steps.identity.outputs.commit }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/candidate"
+          container="$(docker create "$IDENTITY_TAG")"
+          docker cp "${container}:/app/junto.jar" "$RUNNER_TEMP/candidate/junto.jar"
+          docker rm "$container" >/dev/null
+          (cd backend && ./gradlew -q releaseMetadata --no-daemon --console=plain | grep -m1 '^{') \
+            > "$RUNNER_TEMP/candidate/release-metadata.json"
+          ./scripts/verify-release-artifact.sh \
+            "$RUNNER_TEMP/candidate/junto.jar" \
+            "$RUNNER_TEMP/candidate/release-metadata.json"
+
+      - name: Catalogue and scan the release candidate's dependencies
+        env:
+          IDENTITY_TAG: ${{ env.IMAGE_NAME }}:sha-${{ steps.identity.outputs.commit }}
+        run: ./scripts/scan-release-dependencies.sh "$IDENTITY_TAG" "$RUNNER_TEMP/release-assets"
+
+      - name: Sign in to the container registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Preserve the commit tag's immutable release identity
+        id: publication
+        env:
+          COMMIT: ${{ steps.identity.outputs.commit }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IDENTITY_TAG: ${{ env.IMAGE_NAME }}:sha-${{ steps.identity.outputs.commit }}
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
+        run: |
+          existing_digest="$(docker buildx imagetools inspect "$IDENTITY_TAG" --format '{{.Manifest.Digest}}' 2>/dev/null || true)"
+          if release="$(gh release view "$RELEASE_TAG" --json assets,body,isDraft,targetCommitish 2>/dev/null)"; then
+            recorded_digest="$(echo "$release" | jq -r 'try (.body | capture("(?m)^\\| Image digest \\| `(?<digest>sha256:[0-9a-f]{64})` \\|$").digest) catch ""')"
+            [ "$(echo "$release" | jq -r .targetCommitish)" = "$COMMIT" ] || {
+              echo "Release $RELEASE_TAG does not target $COMMIT." >&2
+              exit 1
+            }
+            [ -n "$recorded_digest" ] || {
+              echo "Release $RELEASE_TAG has no valid recorded image digest." >&2
+              exit 1
+            }
+            [ "$existing_digest" = "$recorded_digest" ] || {
+              echo "Commit tag $IDENTITY_TAG resolves to '$existing_digest', not recorded digest '$recorded_digest'." >&2
+              exit 1
+            }
+
+            has_sbom="$(echo "$release" | jq -r 'any(.assets[]?; .name == "sbom.cdx.json" and ((.size // 0) > 0))')"
+            has_vulnerabilities="$(echo "$release" | jq -r 'any(.assets[]?; .name == "vulnerabilities.json" and ((.size // 0) > 0))')"
+            is_draft="$(echo "$release" | jq -r .isDraft)"
+            release_complete=false
+            if [ "$is_draft" = false ] && [ "$has_sbom" = true ] && [ "$has_vulnerabilities" = true ]; then
+              release_complete=true
+            fi
+            {
+              echo "digest=$recorded_digest"
+              echo "finalize_draft=$is_draft"
+              echo "has_sbom=$has_sbom"
+              echo "has_vulnerabilities=$has_vulnerabilities"
+              echo "publish_image=false"
+              echo "release_complete=$release_complete"
+              echo "release_exists=true"
+            } >> "$GITHUB_OUTPUT"
+            if [ "$release_complete" = true ]; then
+              echo "Candidate $RELEASE_TAG is already published at $recorded_digest." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Candidate $RELEASE_TAG is incomplete; this run will reconcile its release evidence." >> "$GITHUB_STEP_SUMMARY"
+            fi
+            exit 0
+          fi
+
+          publish_image=true
+          if [ -n "$existing_digest" ]; then
+            local_config_digest="$(docker image inspect "$IDENTITY_TAG" --format '{{.Id}}')"
+            remote_config_digest="$(docker buildx imagetools inspect "$IDENTITY_TAG" --raw | jq -r '.config.digest // ""')"
+            if [ -z "$remote_config_digest" ] || [ "$remote_config_digest" != "$local_config_digest" ]; then
+              echo "Commit tag $IDENTITY_TAG exists without release $RELEASE_TAG but does not match this verified build." >&2
+              exit 1
+            fi
+            publish_image=false
+          fi
+          {
+            echo "digest=$existing_digest"
+            echo "finalize_draft=false"
+            echo "has_sbom=false"
+            echo "has_vulnerabilities=false"
+            echo "publish_image=$publish_image"
+            echo "release_complete=false"
+            echo "release_exists=false"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the rollback target this candidate would replace
+        id: rollback
+        if: steps.publication.outputs.release_exists == 'false'
+        run: |
+          # Whatever `prod` points at now is what production returns to if this
+          # candidate is promoted and then has to be withdrawn.
+          if digest="$(docker buildx imagetools inspect "$IMAGE_NAME:prod" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+            echo "target=$digest" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=none (first production release)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish the release candidate image
+        id: publish
+        if: steps.publication.outputs.publish_image == 'true'
+        env:
+          IDENTITY_TAG: ${{ env.IMAGE_NAME }}:sha-${{ steps.identity.outputs.commit }}
+        run: |
+          docker push "$IDENTITY_TAG"
+          digest="$(docker buildx imagetools inspect "$IDENTITY_TAG" --format '{{.Manifest.Digest}}')"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Record the release
+        if: steps.publication.outputs.release_exists == 'false'
+        env:
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
+          COMMIT: ${{ steps.identity.outputs.commit }}
+          IMAGE_REFERENCE: ${{ env.IMAGE_NAME }}:sha-${{ steps.identity.outputs.commit }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest || steps.publication.outputs.digest }}
+          APP_VERSION: ${{ steps.identity.outputs.version }}
+          SCHEMA_VERSION: ${{ steps.identity.outputs.schema_version }}
+          CONFIG_VERSION: ${{ steps.identity.outputs.config_version }}
+          ROLLBACK_TARGET: ${{ steps.rollback.outputs.target }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          VULNERABILITY_SUMMARY="$(jq -c . "$RUNNER_TEMP/release-assets/vulnerability-summary.json")" \
+            ./scripts/render-release-record.sh candidate > "$RUNNER_TEMP/release-record.md"
+          cat "$RUNNER_TEMP/release-record.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the release record and supply-chain evidence
+        if: steps.publication.outputs.release_complete != 'true'
+        env:
+          FINALIZE_DRAFT: ${{ steps.publication.outputs.finalize_draft }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HAS_SBOM: ${{ steps.publication.outputs.has_sbom }}
+          HAS_VULNERABILITIES: ${{ steps.publication.outputs.has_vulnerabilities }}
+          IDENTITY_TAG: ${{ env.IMAGE_NAME }}:sha-${{ steps.identity.outputs.commit }}
+          PUBLISHED_DIGEST: ${{ steps.publish.outputs.digest || steps.publication.outputs.digest }}
+          RELEASE_EXISTS: ${{ steps.publication.outputs.release_exists }}
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
+        run: |
+          current_digest="$(docker buildx imagetools inspect "$IDENTITY_TAG" --format '{{.Manifest.Digest}}')"
+          [ "$current_digest" = "$PUBLISHED_DIGEST" ] || {
+            echo "Commit tag $IDENTITY_TAG changed from published digest '$PUBLISHED_DIGEST' to '$current_digest'." >&2
+            exit 1
+          }
+          if [ "$RELEASE_EXISTS" = false ]; then
+            gh release create "$RELEASE_TAG" \
+              --target "${{ steps.identity.outputs.commit }}" \
+              --title "$RELEASE_TAG (candidate)" \
+              --notes-file "$RUNNER_TEMP/release-record.md" \
+              --prerelease \
+              "$RUNNER_TEMP/release-assets/sbom.cdx.json#Software bill of materials (CycloneDX)" \
+              "$RUNNER_TEMP/release-assets/vulnerabilities.json#Fixable dependency advisories"
+            exit 0
+          fi
+
+          assets=()
+          if [ "$HAS_SBOM" != true ]; then
+            assets+=("$RUNNER_TEMP/release-assets/sbom.cdx.json#Software bill of materials (CycloneDX)")
+          fi
+          if [ "$HAS_VULNERABILITIES" != true ]; then
+            assets+=("$RUNNER_TEMP/release-assets/vulnerabilities.json#Fixable dependency advisories")
+          fi
+          if [ "${#assets[@]}" -gt 0 ]; then
+            gh release upload "$RELEASE_TAG" --clobber "${assets[@]}"
+          fi
+          if [ "$FINALIZE_DRAFT" = true ]; then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease
+          fi
