@@ -9,6 +9,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Auth-code replacement in `AuthCodeService` intentionally uses `PostgresAuthTokenIssuanceLock` plus the partial unique index as the final invariant; see `AuthConcurrencyIntegrationTest`.
 - `X-Forwarded-*` is trusted only by the `prod` profile, and the client address that `AuthRateLimiter` limits on comes from Tomcat's `RemoteIpValve`. Never widen that trust to shared configuration or switch to the `framework` strategy; see the production runtime section of `README.md` and `ch.junto.core.config` tests.
 - Production bootstrap is the CLI-only `bootstrap-admin` persistence context, never an application bean or endpoint. Reusable pilot access codes are separate from single-use personal invites; see `BootstrapContext`, `AccessCodeService`, and their integration tests.
+- Readiness at `GET /healthz` is schema-aware, caches results for one second, and is deliberately detail-free: it fails when Flyway reports a migration this build ships as unapplied, excludes SMTP so a mail outage cannot drain traffic, and returns a fixed body. Preserve these invariants; see `ReadinessCheck` and `ReadinessFailureIntegrationTest`.
 
 ## Maintaining this file
 

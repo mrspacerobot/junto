@@ -136,6 +136,10 @@ WHERE label = 'bootstrap' AND revoked_at IS NULL;
 
 Never delete the code row as a revocation mechanism.
 
+Readiness results are cached for one second to avoid amplifying platform probes into database
+traffic. An instance therefore recovers on its own shortly after the database returns; it does not
+need a restart.
+
 ## Formatting
 
 Java uses Google Java Style through Spotless with a pinned `google-java-format`;
