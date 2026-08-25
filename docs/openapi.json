@@ -949,6 +949,237 @@
         }
       }
     },
+    "/auth/login": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/activities": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex_1",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/verify": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex_2",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/messages/{activityId}": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex_3",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/explore": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex_4",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/messages": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex_5",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/saved": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex_6",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/onboard": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex_7",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex_8",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex_9",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/activities/{id}": {
+      "get": {
+        "tags": [
+          "spa-controller"
+        ],
+        "operationId": "spaIndex_10",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/users/profile": {
       "get": {
         "tags": [
@@ -1100,6 +1331,85 @@
           "user-controller"
         ],
         "operationId": "userDeleteAccount",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/{path}": {
+      "get": {
+        "tags": [
+          "unknown-api-controller"
+        ],
+        "operationId": "unknownApiNotFound",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "unknown-api-controller"
+        ],
+        "operationId": "unknownApiNotFound_2",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "unknown-api-controller"
+        ],
+        "operationId": "unknownApiNotFound_1",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "unknown-api-controller"
+        ],
+        "operationId": "unknownApiNotFound_3",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "options": {
+        "tags": [
+          "unknown-api-controller"
+        ],
+        "operationId": "unknownApiNotFound_6",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "unknown-api-controller"
+        ],
+        "operationId": "unknownApiNotFound_5",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "unknown-api-controller"
+        ],
+        "operationId": "unknownApiNotFound_4",
         "responses": {
           "200": {
             "description": "OK"
@@ -1491,7 +1801,11 @@
           "reason": {
             "type": "string"
           }
-        }
+        },
+        "required": [
+          "actionType",
+          "targetUserId"
+        ]
       },
       "ModerationAction": {
         "type": "object",
@@ -1560,10 +1874,10 @@
             "type": "string",
             "format": "date-time"
           },
-          "used": {
+          "revoked": {
             "type": "boolean"
           },
-          "revoked": {
+          "used": {
             "type": "boolean"
           }
         }
@@ -1670,9 +1984,7 @@
         "required": [
           "joinPolicy",
           "maxParticipants",
-          "startsAt",
-          "title",
-          "typeSlug"
+          "startsAt"
         ]
       },
       "ParticipantResponse": {
