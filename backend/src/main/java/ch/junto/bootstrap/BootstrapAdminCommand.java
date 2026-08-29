@@ -15,7 +15,9 @@ import org.springframework.context.ConfigurableApplicationContext;
  * <p>The administrator address and the initial access code are read from the environment at
  * execution time, never from committed configuration, a migration, or an HTTP request, and never
  * from the command line where a process listing would expose them. The operator removes both
- * variables once the command has succeeded.
+ * variables once the command has succeeded. Neither reaches a log either: the bootstrap connection
+ * runs with PostgreSQL server error details disabled, so a constraint violation cannot echo the
+ * offending address or code back through the driver's exception message.
  *
  * <p>The command starts a persistence-only context (see {@link BootstrapContext}), writes, and
  * exits. No web server, security filter chain, or scheduler is ever created.
@@ -34,7 +36,8 @@ public final class BootstrapAdminCommand {
   private static final String[] REQUIRED_PROPERTIES = {
     "--spring.main.web-application-type=none",
     "--spring.flyway.enabled=true",
-    "--app.scheduling.enabled=false"
+    "--app.scheduling.enabled=false",
+    "--spring.datasource.hikari.data-source-properties.logServerErrorDetail=false"
   };
 
   private static final Logger log = LoggerFactory.getLogger(BootstrapAdminCommand.class);
