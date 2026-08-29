@@ -50,7 +50,8 @@ public class SecurityConfig {
                         "/api/auth/signup/request-code",
                         "/api/auth/verify",
                         "/api/auth/verify-token",
-                        "/api/auth/dev-login")
+                        "/api/auth/dev-login",
+                        "/healthz")
                     .permitAll()
                     .requestMatchers("/api/**")
                     .authenticated()

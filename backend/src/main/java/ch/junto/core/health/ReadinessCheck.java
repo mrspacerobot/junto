@@ -1,9 +1,19 @@
 package ch.junto.core.health;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationVersion;
@@ -29,13 +39,19 @@ public class ReadinessCheck {
 
   private static final Logger log = LoggerFactory.getLogger(ReadinessCheck.class);
   private static final long CACHE_DURATION_NANOS = TimeUnit.SECONDS.toNanos(1);
+  private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(2);
   private static final int QUERY_TIMEOUT_SECONDS = 1;
-  private static final String REQUIRED_SCHEMA_PROBE =
-      """
-      SELECT activity_id, user_id, window_started_at, request_count
-      FROM chat_rate_limits
-      LIMIT 0
-      """;
+  private static final List<String> REQUIRED_CHAT_RATE_LIMIT_COLUMNS =
+      List.of("activity_id", "user_id", "window_started_at", "request_count");
+  private static final List<String> REQUIRED_CHAT_RATE_LIMIT_KEY_COLUMNS =
+      List.of("activity_id", "user_id");
+  private static final ExecutorService READINESS_EXECUTOR =
+      Executors.newSingleThreadExecutor(
+          r -> {
+            Thread thread = new Thread(r, "readiness-check");
+            thread.setDaemon(true);
+            return thread;
+          });
 
   private final DataSource dataSource;
   private final ObjectProvider<Flyway> flyway;
@@ -60,22 +76,72 @@ public class ReadinessCheck {
         return cached.ready();
       }
 
-      boolean ready = databaseProvidesRequiredSchema() && schemaMatchesThisBuild();
+      boolean ready = evaluateReadinessWithTimeout();
       cachedResult = new CachedResult(ready, System.nanoTime() + CACHE_DURATION_NANOS);
       return ready;
     }
   }
 
+  private boolean evaluateReadinessWithTimeout() {
+    try {
+      return READINESS_EXECUTOR
+          .submit(this::databaseProvidesRequiredSchemaAndMatchesBuild)
+          .get(OPERATION_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+    } catch (TimeoutException e) {
+      log.warn("Readiness failed: the database readiness operation timed out", e);
+      return false;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      log.warn("Readiness failed: the database readiness operation was interrupted", e);
+      return false;
+    } catch (ExecutionException e) {
+      log.warn("Readiness failed: the database readiness operation could not complete", e);
+      return false;
+    }
+  }
+
+  private boolean databaseProvidesRequiredSchemaAndMatchesBuild() {
+    return databaseProvidesRequiredSchema() && schemaMatchesThisBuild();
+  }
+
   private boolean databaseProvidesRequiredSchema() {
-    try (Connection connection = dataSource.getConnection();
-        Statement statement = connection.createStatement()) {
-      statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
-      try (ResultSet ignored = statement.executeQuery(REQUIRED_SCHEMA_PROBE)) {
-        return true;
-      }
+    try (Connection connection = dataSource.getConnection()) {
+      statementWithin(connection);
+      return requiredSchemaColumnsAndKeyExist(connection);
     } catch (Exception e) {
       log.warn("Readiness failed: the database or required schema did not answer", e);
       return false;
+    }
+  }
+
+  private void statementWithin(Connection connection) throws Exception {
+    try (Statement statement = connection.createStatement()) {
+      statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
+      try (ResultSet ignored =
+          statement.executeQuery(
+              "SELECT activity_id, user_id, window_started_at, request_count FROM chat_rate_limits LIMIT 0")) {
+        // probe only
+      }
+    }
+  }
+
+  private boolean requiredSchemaColumnsAndKeyExist(Connection connection) throws Exception {
+    DatabaseMetaData metaData = connection.getMetaData();
+    try (ResultSet columns = metaData.getColumns(null, null, "chat_rate_limits", null)) {
+      Set<String> foundColumns = new HashSet<>();
+      while (columns.next()) {
+        foundColumns.add(columns.getString("COLUMN_NAME"));
+      }
+      if (!foundColumns.containsAll(REQUIRED_CHAT_RATE_LIMIT_COLUMNS)) {
+        return false;
+      }
+    }
+    try (ResultSet keyColumns = metaData.getPrimaryKeys(null, null, "chat_rate_limits")) {
+      List<String> foundKeyColumns = new ArrayList<>();
+      while (keyColumns.next()) {
+        foundKeyColumns.add(keyColumns.getString("COLUMN_NAME"));
+      }
+      return foundKeyColumns.equals(REQUIRED_CHAT_RATE_LIMIT_KEY_COLUMNS);
     }
   }
 

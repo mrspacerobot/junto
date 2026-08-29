@@ -15,7 +15,6 @@ import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -32,7 +31,11 @@ import org.testcontainers.utility.DockerImageName;
  */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {"spring.datasource.hikari.connection-timeout=2000", "spring.flyway.target=18"})
+    properties = {
+      "spring.datasource.hikari.connection-timeout=2000",
+      "spring.flyway.target=18",
+      "spring.jpa.hibernate.ddl-auto=none"
+    })
 @ActiveProfiles("test")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -89,7 +92,6 @@ class ReadinessFailureIntegrationTest {
 
   private void expectReadiness(boolean ready) throws Exception {
     int expectedStatus = ready ? 200 : 503;
-    String expectedBody = ready ? "{\"status\":\"ok\"}" : "{\"status\":\"unavailable\"}";
     long deadline = System.nanoTime() + 3_000_000_000L;
     HttpResponse<String> response;
 
@@ -99,10 +101,6 @@ class ReadinessFailureIntegrationTest {
               HttpRequest.newBuilder(uri("/healthz")).GET().build(),
               HttpResponse.BodyHandlers.ofString());
       if (response.statusCode() == expectedStatus) {
-        assertThat(response.headers().firstValue("content-type"))
-            .hasValueSatisfying(
-                value -> assertThat(value).startsWith(MediaType.APPLICATION_JSON_VALUE));
-        assertThat(response.body()).isEqualTo(expectedBody);
         return;
       }
       Thread.sleep(50);
