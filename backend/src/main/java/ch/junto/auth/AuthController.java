@@ -3,6 +3,7 @@ package ch.junto.auth;
 import ch.junto.auth.dto.MeResponse;
 import ch.junto.user.ValidEmailAddress;
 import ch.junto.user.entity.User;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -30,12 +31,35 @@ public class AuthController {
     this.authRateLimiter = authRateLimiter;
   }
 
-  public record RequestCodeRequest(@ValidEmailAddress String email) {}
+  // springdoc reads only Bean Validation annotations that are directly present on a property, so
+  // the constraints @ValidEmailAddress composes are restated as explicit @Schema metadata built
+  // from its constants. Without this the generated contract would advertise an unconstrained
+  // string and clients would accept addresses the server rejects with 400.
+  public record RequestCodeRequest(
+      @ValidEmailAddress
+          @Schema(
+              pattern = ValidEmailAddress.PATTERN,
+              minLength = 1,
+              maxLength = ValidEmailAddress.MAX_LENGTH)
+          String email) {}
 
-  public record RequestSignupCodeRequest(@ValidEmailAddress String email, String inviteCode) {}
+  public record RequestSignupCodeRequest(
+      @ValidEmailAddress
+          @Schema(
+              pattern = ValidEmailAddress.PATTERN,
+              minLength = 1,
+              maxLength = ValidEmailAddress.MAX_LENGTH)
+          String email,
+      String inviteCode) {}
 
   public record VerifyCodeRequest(
-      @ValidEmailAddress String email, @NotBlank @Pattern(regexp = "\\d{6}") String code) {}
+      @ValidEmailAddress
+          @Schema(
+              pattern = ValidEmailAddress.PATTERN,
+              minLength = 1,
+              maxLength = ValidEmailAddress.MAX_LENGTH)
+          String email,
+      @NotBlank @Pattern(regexp = "\\d{6}") String code) {}
 
   public record VerifyTokenRequest(@NotBlank String token) {}
 
