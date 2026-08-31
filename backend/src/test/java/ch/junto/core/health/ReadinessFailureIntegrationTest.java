@@ -103,6 +103,14 @@ class ReadinessFailureIntegrationTest {
       execute("ALTER TABLE auth_tokens ALTER COLUMN invite_code TYPE VARCHAR(64)");
     }
     expectReadiness(true);
+
+    execute("ALTER TABLE auth_tokens RENAME COLUMN invite_code TO invitexcode");
+    try {
+      expectReadiness(false);
+    } finally {
+      execute("ALTER TABLE auth_tokens RENAME COLUMN invitexcode TO invite_code");
+    }
+    expectReadiness(true);
   }
 
   @Test

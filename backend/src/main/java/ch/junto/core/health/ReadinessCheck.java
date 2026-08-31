@@ -8,6 +8,7 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -194,8 +195,13 @@ public class ReadinessCheck {
       throws SQLException {
     try (ResultSet columns =
         metaData.getColumns(null, schema, AUTH_TOKEN_TABLE, INVITE_CODE_COLUMN)) {
-      if (columns.next() && columns.getInt("COLUMN_SIZE") >= REQUIRED_INVITE_CODE_LENGTH) {
-        return true;
+      while (columns.next()) {
+        if (Objects.equals(schema, columns.getString("TABLE_SCHEM"))
+            && AUTH_TOKEN_TABLE.equals(columns.getString("TABLE_NAME"))
+            && INVITE_CODE_COLUMN.equals(columns.getString("COLUMN_NAME"))
+            && columns.getInt("COLUMN_SIZE") >= REQUIRED_INVITE_CODE_LENGTH) {
+          return true;
+        }
       }
       log.warn(
           "Readiness failed: {}.{} does not accept at least {} characters",

@@ -86,6 +86,19 @@ class ReadinessCheckTest {
   }
 
   @Test
+  void similarlyNamedInviteCodeColumnIsNotReady() throws Exception {
+    DataSource dataSource = mock(DataSource.class);
+    schemaWithChatRateLimitKey(
+        dataSource, List.of("activity_id", "user_id"), 64, "invitexcode");
+    ObjectProvider<Flyway> flywayProvider = flywayProvider();
+
+    ReadinessCheck readiness = new ReadinessCheck(dataSource, flywayProvider);
+
+    assertThat(readiness.isReady()).isFalse();
+    verify(flywayProvider, never()).getIfAvailable();
+  }
+
+  @Test
   void flywayValidationUsesNetworkBoundedConnections() throws Exception {
     DataSource dataSource = mock(DataSource.class);
     SchemaFixture schema =
@@ -141,11 +154,20 @@ class ReadinessCheckTest {
 
   private static SchemaFixture schemaWithChatRateLimitKey(
       DataSource dataSource, List<String> keyColumns) throws SQLException {
-    return schemaWithChatRateLimitKey(dataSource, keyColumns, 64);
+    return schemaWithChatRateLimitKey(dataSource, keyColumns, 64, "invite_code");
   }
 
   private static SchemaFixture schemaWithChatRateLimitKey(
       DataSource dataSource, List<String> keyColumns, int inviteCodeLength) throws SQLException {
+    return schemaWithChatRateLimitKey(dataSource, keyColumns, inviteCodeLength, "invite_code");
+  }
+
+  private static SchemaFixture schemaWithChatRateLimitKey(
+      DataSource dataSource,
+      List<String> keyColumns,
+      int inviteCodeLength,
+      String inviteCodeColumn)
+      throws SQLException {
     Connection connection = mock(Connection.class);
     Statement statement = mock(Statement.class);
     ResultSet resultSet = mock(ResultSet.class);
@@ -170,6 +192,9 @@ class ReadinessCheckTest {
     when(keys.getString("COLUMN_NAME"))
         .thenAnswer(invocation -> keyColumns.get(keyCursor.get() - 1));
     when(inviteCode.next()).thenReturn(true, false);
+    when(inviteCode.getString("TABLE_SCHEM")).thenReturn("public");
+    when(inviteCode.getString("TABLE_NAME")).thenReturn("auth_tokens");
+    when(inviteCode.getString("COLUMN_NAME")).thenReturn(inviteCodeColumn);
     when(inviteCode.getInt("COLUMN_SIZE")).thenReturn(inviteCodeLength);
     return new SchemaFixture(connection, statement, metaData);
   }
