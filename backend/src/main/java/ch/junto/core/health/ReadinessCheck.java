@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -21,6 +22,7 @@ import org.flywaydb.core.api.output.ValidateResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.jdbc.datasource.DelegatingDataSource;
 import org.springframework.stereotype.Component;
 
 /**
@@ -41,7 +43,12 @@ public class ReadinessCheck {
   private static final long CACHE_DURATION_NANOS = TimeUnit.SECONDS.toNanos(1);
   private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(2);
   private static final int QUERY_TIMEOUT_SECONDS = 1;
+  private static final int NETWORK_TIMEOUT_MILLISECONDS =
+      Math.toIntExact(TimeUnit.SECONDS.toMillis(QUERY_TIMEOUT_SECONDS));
   private static final String CHAT_RATE_LIMIT_TABLE = "chat_rate_limits";
+  private static final String AUTH_TOKEN_TABLE = "auth_tokens";
+  private static final String INVITE_CODE_COLUMN = "invite_code";
+  private static final int REQUIRED_INVITE_CODE_LENGTH = 64;
 
   /**
    * One probe per capability the newest shipped migrations must have delivered: the shared chat
@@ -52,7 +59,7 @@ public class ReadinessCheck {
   private static final List<String> SCHEMA_CAPABILITY_PROBES =
       List.of(
           "SELECT activity_id, user_id, window_started_at, request_count FROM chat_rate_limits LIMIT 0",
-          "SELECT id, code, label, created_by, revoked_at FROM access_codes LIMIT 0",
+          "SELECT id, code, label, created_by, revoked_at, created_at FROM access_codes LIMIT 0",
           "SELECT id, access_code_id, user_id, redeemed_at FROM access_code_redemptions LIMIT 0");
 
   private static final List<String> REQUIRED_CHAT_RATE_LIMIT_KEY_COLUMNS =
@@ -64,6 +71,12 @@ public class ReadinessCheck {
             thread.setDaemon(true);
             return thread;
           });
+  private static final Executor NETWORK_TIMEOUT_EXECUTOR =
+      task -> {
+        Thread thread = new Thread(task, "readiness-network-timeout");
+        thread.setDaemon(true);
+        thread.start();
+      };
 
   private final DataSource dataSource;
   private final ObjectProvider<Flyway> flyway;
@@ -71,7 +84,7 @@ public class ReadinessCheck {
   private volatile Flyway currentBuildMigrations;
 
   public ReadinessCheck(DataSource dataSource, ObjectProvider<Flyway> flyway) {
-    this.dataSource = dataSource;
+    this.dataSource = new NetworkTimeoutDataSource(dataSource);
     this.flyway = flyway;
   }
 
@@ -127,7 +140,7 @@ public class ReadinessCheck {
   private boolean databaseProvidesRequiredSchema() {
     try (Connection connection = dataSource.getConnection()) {
       probeShippedSchemaCapabilities(connection);
-      return requiredChatRateLimitKeyExists(connection);
+      return requiredSchemaMetadataExists(connection);
     } catch (Exception e) {
       log.warn("Readiness failed: the database or required schema did not answer", e);
       return false;
@@ -150,10 +163,17 @@ public class ReadinessCheck {
    * (activity_id, user_id)} depends on, so it is read from metadata scoped to the schema this
    * connection resolves rather than from every schema that happens to hold a table of that name.
    */
-  private boolean requiredChatRateLimitKeyExists(Connection connection) throws SQLException {
+  private boolean requiredSchemaMetadataExists(Connection connection) throws SQLException {
     DatabaseMetaData metaData = connection.getMetaData();
+    String schema = connection.getSchema();
+    return requiredChatRateLimitKeyExists(metaData, schema)
+        && requiredInviteCodeWidthExists(metaData, schema);
+  }
+
+  private boolean requiredChatRateLimitKeyExists(DatabaseMetaData metaData, String schema)
+      throws SQLException {
     try (ResultSet keyColumns =
-        metaData.getPrimaryKeys(null, connection.getSchema(), CHAT_RATE_LIMIT_TABLE)) {
+        metaData.getPrimaryKeys(null, schema, CHAT_RATE_LIMIT_TABLE)) {
       List<String> foundKeyColumns = new ArrayList<>();
       while (keyColumns.next()) {
         foundKeyColumns.add(keyColumns.getString("COLUMN_NAME"));
@@ -167,6 +187,22 @@ public class ReadinessCheck {
         return false;
       }
       return true;
+    }
+  }
+
+  private boolean requiredInviteCodeWidthExists(DatabaseMetaData metaData, String schema)
+      throws SQLException {
+    try (ResultSet columns =
+        metaData.getColumns(null, schema, AUTH_TOKEN_TABLE, INVITE_CODE_COLUMN)) {
+      if (columns.next() && columns.getInt("COLUMN_SIZE") >= REQUIRED_INVITE_CODE_LENGTH) {
+        return true;
+      }
+      log.warn(
+          "Readiness failed: {}.{} does not accept at least {} characters",
+          AUTH_TOKEN_TABLE,
+          INVITE_CODE_COLUMN,
+          REQUIRED_INVITE_CODE_LENGTH);
+      return false;
     }
   }
 
@@ -205,6 +241,7 @@ public class ReadinessCheck {
     resolved =
         Flyway.configure()
             .configuration(configured.getConfiguration())
+            .dataSource(dataSource)
             .target(MigrationVersion.LATEST)
             .load();
     currentBuildMigrations = resolved;
@@ -214,6 +251,37 @@ public class ReadinessCheck {
   private record CachedResult(boolean ready, long expiresAt) {
     private boolean isCurrentAt(long now) {
       return now < expiresAt;
+    }
+  }
+
+  private static final class NetworkTimeoutDataSource extends DelegatingDataSource {
+
+    private NetworkTimeoutDataSource(DataSource targetDataSource) {
+      super(targetDataSource);
+    }
+
+    @Override
+    public Connection getConnection() throws SQLException {
+      return applyNetworkTimeout(super.getConnection());
+    }
+
+    @Override
+    public Connection getConnection(String username, String password) throws SQLException {
+      return applyNetworkTimeout(super.getConnection(username, password));
+    }
+
+    private Connection applyNetworkTimeout(Connection connection) throws SQLException {
+      try {
+        connection.setNetworkTimeout(NETWORK_TIMEOUT_EXECUTOR, NETWORK_TIMEOUT_MILLISECONDS);
+        return connection;
+      } catch (SQLException | RuntimeException e) {
+        try {
+          connection.close();
+        } catch (SQLException closeFailure) {
+          e.addSuppressed(closeFailure);
+        }
+        throw e;
+      }
     }
   }
 }

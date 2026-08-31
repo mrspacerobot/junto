@@ -6,6 +6,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Connection;
+import java.sql.Statement;
+import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.MethodOrderer;
@@ -64,6 +67,7 @@ class ReadinessFailureIntegrationTest {
 
   @LocalServerPort private int port;
   @Autowired private Flyway flyway;
+  @Autowired private DataSource dataSource;
 
   @Test
   @Order(1)
@@ -82,6 +86,27 @@ class ReadinessFailureIntegrationTest {
 
   @Test
   @Order(2)
+  void newestMigrationCapabilityDriftIsNotReady() throws Exception {
+    execute("ALTER TABLE access_codes DROP COLUMN created_at");
+    try {
+      expectReadiness(false);
+    } finally {
+      execute(
+          "ALTER TABLE access_codes ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now()");
+    }
+    expectReadiness(true);
+
+    execute("ALTER TABLE auth_tokens ALTER COLUMN invite_code TYPE VARCHAR(12)");
+    try {
+      expectReadiness(false);
+    } finally {
+      execute("ALTER TABLE auth_tokens ALTER COLUMN invite_code TYPE VARCHAR(64)");
+    }
+    expectReadiness(true);
+  }
+
+  @Test
+  @Order(3)
   void databaseOutageIsNotReady() throws Exception {
     expectReadiness(true);
 
@@ -111,5 +136,12 @@ class ReadinessFailureIntegrationTest {
 
   private URI uri(String path) {
     return URI.create("http://localhost:" + port + path);
+  }
+
+  private void execute(String sql) throws Exception {
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement()) {
+      statement.execute(sql);
+    }
   }
 }
