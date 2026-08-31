@@ -91,8 +91,7 @@ class ReadinessFailureIntegrationTest {
     try {
       expectReadiness(false);
     } finally {
-      execute(
-          "ALTER TABLE access_codes ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now()");
+      execute("ALTER TABLE access_codes ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now()");
     }
     expectReadiness(true);
 

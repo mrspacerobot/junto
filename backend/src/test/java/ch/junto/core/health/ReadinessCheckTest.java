@@ -88,8 +88,7 @@ class ReadinessCheckTest {
   @Test
   void similarlyNamedInviteCodeColumnIsNotReady() throws Exception {
     DataSource dataSource = mock(DataSource.class);
-    schemaWithChatRateLimitKey(
-        dataSource, List.of("activity_id", "user_id"), 64, "invitexcode");
+    schemaWithChatRateLimitKey(dataSource, List.of("activity_id", "user_id"), 64, "invitexcode");
     ObjectProvider<Flyway> flywayProvider = flywayProvider();
 
     ReadinessCheck readiness = new ReadinessCheck(dataSource, flywayProvider);
@@ -109,8 +108,7 @@ class ReadinessCheckTest {
 
     assertThat(readiness.isReady()).isFalse();
     verify(dataSource, atLeast(2)).getConnection();
-    verify(schema.connection(), atLeast(2))
-        .setNetworkTimeout(any(Executor.class), eq(1000));
+    verify(schema.connection(), atLeast(2)).setNetworkTimeout(any(Executor.class), eq(1000));
   }
 
   @Test
@@ -163,10 +161,7 @@ class ReadinessCheckTest {
   }
 
   private static SchemaFixture schemaWithChatRateLimitKey(
-      DataSource dataSource,
-      List<String> keyColumns,
-      int inviteCodeLength,
-      String inviteCodeColumn)
+      DataSource dataSource, List<String> keyColumns, int inviteCodeLength, String inviteCodeColumn)
       throws SQLException {
     Connection connection = mock(Connection.class);
     Statement statement = mock(Statement.class);
@@ -185,8 +180,7 @@ class ReadinessCheckTest {
     when(metaData.getUserName()).thenReturn("junto");
     when(statement.executeQuery(anyString())).thenReturn(resultSet);
     when(metaData.getPrimaryKeys(null, "public", "chat_rate_limits")).thenReturn(keys);
-    when(metaData.getColumns(null, "public", "auth_tokens", "invite_code"))
-        .thenReturn(inviteCode);
+    when(metaData.getColumns(null, "public", "auth_tokens", "invite_code")).thenReturn(inviteCode);
     AtomicInteger keyCursor = new AtomicInteger();
     when(keys.next()).thenAnswer(invocation -> keyCursor.getAndIncrement() < keyColumns.size());
     when(keys.getString("COLUMN_NAME"))

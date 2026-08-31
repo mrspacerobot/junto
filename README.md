@@ -67,8 +67,8 @@ longer read by the production profile.
 
 ## Production runtime behind the provider proxy
 
-Render terminates TLS and forwards plain HTTP to the container, so the runtime
-contract is declared in `backend/src/main/resources/application.yml` and
+Render terminates TLS and forwards plain HTTP to the container, so the proxy-facing
+runtime settings are declared in `backend/src/main/resources/application.yml` and
 `application-prod.yml` rather than in code.
 
 | Setting | Value | Why |
@@ -100,6 +100,21 @@ instead of widening the trust to everything.
 `TrustedProxyForwardingIntegrationTest` / `UntrustedForwardedHeaderIntegrationTest`
 assert the behavior on both sides of the boundary against a real servlet container.
 `MockMvc` cannot cover this: forwarded-header handling is an engine valve.
+
+### Production readiness
+
+Configure Render's health check path as `/healthz`. This public endpoint returns only one of two
+fixed response bodies: HTTP 200 with `{"status":"ok"}` when the database answers within the
+two-second readiness operation, the required schema capabilities are present, and Flyway validates
+the applied schema against every migration shipped in the build. It returns HTTP 503 with
+`{"status":"unavailable"}` when the database is unavailable or times out, a shipped migration is
+unapplied or invalid, or a required schema invariant has drifted, including the
+`chat_rate_limits (activity_id, user_id)` key. Failure details are logged but never exposed by the
+endpoint.
+
+SMTP is deliberately excluded, so a mail outage does not remove an otherwise healthy instance
+from service. Each success or failure is cached for one second after its check completes, which
+shares failures across concurrent platform probes without requiring a restart after recovery.
 
 ## First-administrator bootstrap
 
@@ -135,10 +150,6 @@ WHERE label = 'bootstrap' AND revoked_at IS NULL;
 ```
 
 Never delete the code row as a revocation mechanism.
-
-Readiness results are cached for one second to avoid amplifying platform probes into database
-traffic. An instance therefore recovers on its own shortly after the database returns; it does not
-need a restart.
 
 ## Formatting
 

@@ -173,8 +173,7 @@ public class ReadinessCheck {
 
   private boolean requiredChatRateLimitKeyExists(DatabaseMetaData metaData, String schema)
       throws SQLException {
-    try (ResultSet keyColumns =
-        metaData.getPrimaryKeys(null, schema, CHAT_RATE_LIMIT_TABLE)) {
+    try (ResultSet keyColumns = metaData.getPrimaryKeys(null, schema, CHAT_RATE_LIMIT_TABLE)) {
       List<String> foundKeyColumns = new ArrayList<>();
       while (keyColumns.next()) {
         foundKeyColumns.add(keyColumns.getString("COLUMN_NAME"));
