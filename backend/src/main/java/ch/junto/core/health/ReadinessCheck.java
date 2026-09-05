@@ -6,7 +6,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
@@ -51,20 +50,45 @@ public class ReadinessCheck {
   private static final String INVITE_CODE_COLUMN = "invite_code";
   private static final int REQUIRED_INVITE_CODE_LENGTH = 64;
 
-  /**
-   * One probe per capability the newest shipped migrations must have delivered: the shared chat
-   * rate limit table from V019 and the shared access code tables from V020. A probe fails when its
-   * table is missing from the schema the connection resolves or has lost a column the application
-   * reads.
-   */
+  /** Read-only probes for the capabilities the newest shipped migrations must have delivered. */
   private static final List<String> SCHEMA_CAPABILITY_PROBES =
       List.of(
           "SELECT activity_id, user_id, window_started_at, request_count FROM chat_rate_limits LIMIT 0",
           "SELECT id, code, label, created_by, revoked_at, created_at FROM access_codes LIMIT 0",
           "SELECT id, access_code_id, user_id, redeemed_at FROM access_code_redemptions LIMIT 0");
 
-  private static final List<String> REQUIRED_CHAT_RATE_LIMIT_KEY_COLUMNS =
-      List.of("activity_id", "user_id");
+  private static final String CHAT_RATE_LIMIT_KEY_CAPABILITY_PROBE =
+      """
+      WITH candidate_indexes AS (
+          SELECT index_definition.indimmediate
+          FROM pg_catalog.pg_index AS index_definition
+          JOIN pg_catalog.pg_class AS table_definition
+            ON table_definition.oid = index_definition.indrelid
+          JOIN pg_catalog.pg_namespace AS table_schema
+            ON table_schema.oid = table_definition.relnamespace
+          WHERE table_schema.nspname = current_schema()
+            AND table_definition.relname = 'chat_rate_limits'
+            AND index_definition.indisunique
+            AND index_definition.indisvalid
+            AND index_definition.indpred IS NULL
+            AND index_definition.indexprs IS NULL
+            AND index_definition.indnkeyatts = 2
+            AND (
+                SELECT array_agg(attribute_definition.attname::text
+                                 ORDER BY attribute_definition.attname::text)
+                FROM unnest(index_definition.indkey::smallint[])
+                     WITH ORDINALITY AS key_definition(attnum, key_position)
+                JOIN pg_catalog.pg_attribute AS attribute_definition
+                  ON attribute_definition.attrelid = index_definition.indrelid
+                 AND attribute_definition.attnum = key_definition.attnum
+                WHERE key_definition.key_position <= index_definition.indnkeyatts
+            ) = ARRAY['activity_id', 'user_id']
+      )
+      SELECT EXISTS (SELECT FROM candidate_indexes)
+         AND NOT EXISTS (
+             SELECT FROM candidate_indexes WHERE NOT indimmediate
+         ) AS compatible
+      """;
   private static final ExecutorService READINESS_EXECUTOR =
       Executors.newSingleThreadExecutor(
           r -> {
@@ -140,15 +164,15 @@ public class ReadinessCheck {
 
   private boolean databaseProvidesRequiredSchema() {
     try (Connection connection = dataSource.getConnection()) {
-      probeShippedSchemaCapabilities(connection);
-      return requiredSchemaMetadataExists(connection);
+      return probeShippedSchemaCapabilities(connection)
+          && requiredInviteCodeMetadataExists(connection);
     } catch (Exception e) {
       log.warn("Readiness failed: the database or required schema did not answer", e);
       return false;
     }
   }
 
-  private void probeShippedSchemaCapabilities(Connection connection) throws SQLException {
+  private boolean probeShippedSchemaCapabilities(Connection connection) throws SQLException {
     try (Statement statement = connection.createStatement()) {
       statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
       for (String probe : SCHEMA_CAPABILITY_PROBES) {
@@ -156,37 +180,23 @@ public class ReadinessCheck {
           // probe only
         }
       }
+      return requiredChatRateLimitKeyExists(statement);
     }
   }
 
-  /**
-   * The capability probes cannot observe the key that {@code ChatRateLimiter}'s {@code ON CONFLICT
-   * (activity_id, user_id)} depends on, so it is read from metadata scoped to the schema this
-   * connection resolves rather than from every schema that happens to hold a table of that name.
-   */
-  private boolean requiredSchemaMetadataExists(Connection connection) throws SQLException {
+  private boolean requiredInviteCodeMetadataExists(Connection connection) throws SQLException {
     DatabaseMetaData metaData = connection.getMetaData();
     String schema = connection.getSchema();
-    return requiredChatRateLimitKeyExists(metaData, schema)
-        && requiredInviteCodeWidthExists(metaData, schema);
+    return requiredInviteCodeWidthExists(metaData, schema);
   }
 
-  private boolean requiredChatRateLimitKeyExists(DatabaseMetaData metaData, String schema)
-      throws SQLException {
-    try (ResultSet keyColumns = metaData.getPrimaryKeys(null, schema, CHAT_RATE_LIMIT_TABLE)) {
-      List<String> foundKeyColumns = new ArrayList<>();
-      while (keyColumns.next()) {
-        foundKeyColumns.add(keyColumns.getString("COLUMN_NAME"));
+  private boolean requiredChatRateLimitKeyExists(Statement statement) throws SQLException {
+    try (ResultSet capability = statement.executeQuery(CHAT_RATE_LIMIT_KEY_CAPABILITY_PROBE)) {
+      if (capability.next() && capability.getBoolean("compatible")) {
+        return true;
       }
-      if (!foundKeyColumns.equals(REQUIRED_CHAT_RATE_LIMIT_KEY_COLUMNS)) {
-        log.warn(
-            "Readiness failed: {} key columns are {} instead of {}",
-            CHAT_RATE_LIMIT_TABLE,
-            foundKeyColumns,
-            REQUIRED_CHAT_RATE_LIMIT_KEY_COLUMNS);
-        return false;
-      }
-      return true;
+      log.warn("Readiness failed: {} key is not ON CONFLICT compatible", CHAT_RATE_LIMIT_TABLE);
+      return false;
     }
   }
 

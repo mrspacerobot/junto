@@ -17,11 +17,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
@@ -33,8 +31,7 @@ class ReadinessCheckTest {
   @Test
   void readinessFailureIsCachedUntilExpiry() throws Exception {
     DataSource dataSource = mock(DataSource.class);
-    SchemaFixture schema =
-        schemaWithChatRateLimitKey(dataSource, List.of("activity_id", "user_id"));
+    SchemaFixture schema = schemaWithChatRateLimitKey(dataSource, true);
 
     ReadinessCheck readiness = new ReadinessCheck(dataSource, flywayProvider());
 
@@ -53,8 +50,7 @@ class ReadinessCheckTest {
   @Test
   void readinessProbesTheNewestShippedMigrationsAndChecksFlywayLazily() throws Exception {
     DataSource dataSource = mock(DataSource.class);
-    SchemaFixture schema =
-        schemaWithChatRateLimitKey(dataSource, List.of("activity_id", "user_id"));
+    SchemaFixture schema = schemaWithChatRateLimitKey(dataSource, true);
     ObjectProvider<Flyway> flywayProvider = flywayProvider();
 
     ReadinessCheck readiness = new ReadinessCheck(dataSource, flywayProvider);
@@ -66,17 +62,18 @@ class ReadinessCheckTest {
     verify(schema.metaData()).getColumns(null, "public", "auth_tokens", "invite_code");
     verify(flywayProvider).getIfAvailable();
     ArgumentCaptor<String> probes = ArgumentCaptor.forClass(String.class);
-    verify(schema.statement(), times(3)).executeQuery(probes.capture());
+    verify(schema.statement(), times(4)).executeQuery(probes.capture());
     assertThat(probes.getAllValues())
         .anyMatch(probe -> probe.contains("chat_rate_limits"))
         .anyMatch(probe -> probe.contains("access_codes") && probe.contains("created_at"))
-        .anyMatch(probe -> probe.contains("access_code_redemptions"));
+        .anyMatch(probe -> probe.contains("access_code_redemptions"))
+        .anyMatch(probe -> probe.contains("pg_catalog.pg_index"));
   }
 
   @Test
   void narrowedInviteCodeColumnIsNotReady() throws Exception {
     DataSource dataSource = mock(DataSource.class);
-    schemaWithChatRateLimitKey(dataSource, List.of("activity_id", "user_id"), 12);
+    schemaWithChatRateLimitKey(dataSource, true, 12);
     ObjectProvider<Flyway> flywayProvider = flywayProvider();
 
     ReadinessCheck readiness = new ReadinessCheck(dataSource, flywayProvider);
@@ -88,7 +85,7 @@ class ReadinessCheckTest {
   @Test
   void similarlyNamedInviteCodeColumnIsNotReady() throws Exception {
     DataSource dataSource = mock(DataSource.class);
-    schemaWithChatRateLimitKey(dataSource, List.of("activity_id", "user_id"), 64, "invitexcode");
+    schemaWithChatRateLimitKey(dataSource, true, 64, "invitexcode");
     ObjectProvider<Flyway> flywayProvider = flywayProvider();
 
     ReadinessCheck readiness = new ReadinessCheck(dataSource, flywayProvider);
@@ -100,8 +97,7 @@ class ReadinessCheckTest {
   @Test
   void flywayValidationUsesNetworkBoundedConnections() throws Exception {
     DataSource dataSource = mock(DataSource.class);
-    SchemaFixture schema =
-        schemaWithChatRateLimitKey(dataSource, List.of("activity_id", "user_id"));
+    SchemaFixture schema = schemaWithChatRateLimitKey(dataSource, true);
     Flyway configured = Flyway.configure().dataSource(dataSource).load();
 
     ReadinessCheck readiness = new ReadinessCheck(dataSource, flywayProvider(configured));
@@ -114,7 +110,7 @@ class ReadinessCheckTest {
   @Test
   void requiredChatRateLimitKeyDriftIsNotReady() throws Exception {
     DataSource dataSource = mock(DataSource.class);
-    schemaWithChatRateLimitKey(dataSource, List.of("activity_id"));
+    schemaWithChatRateLimitKey(dataSource, false);
     ObjectProvider<Flyway> flywayProvider = flywayProvider();
 
     ReadinessCheck readiness = new ReadinessCheck(dataSource, flywayProvider);
@@ -150,24 +146,24 @@ class ReadinessCheckTest {
     assertThat(probeInterrupted.await(5, TimeUnit.SECONDS)).isTrue();
   }
 
-  private static SchemaFixture schemaWithChatRateLimitKey(
-      DataSource dataSource, List<String> keyColumns) throws SQLException {
-    return schemaWithChatRateLimitKey(dataSource, keyColumns, 64, "invite_code");
+  private static SchemaFixture schemaWithChatRateLimitKey(DataSource dataSource, boolean compatible)
+      throws SQLException {
+    return schemaWithChatRateLimitKey(dataSource, compatible, 64, "invite_code");
   }
 
   private static SchemaFixture schemaWithChatRateLimitKey(
-      DataSource dataSource, List<String> keyColumns, int inviteCodeLength) throws SQLException {
-    return schemaWithChatRateLimitKey(dataSource, keyColumns, inviteCodeLength, "invite_code");
+      DataSource dataSource, boolean compatible, int inviteCodeLength) throws SQLException {
+    return schemaWithChatRateLimitKey(dataSource, compatible, inviteCodeLength, "invite_code");
   }
 
   private static SchemaFixture schemaWithChatRateLimitKey(
-      DataSource dataSource, List<String> keyColumns, int inviteCodeLength, String inviteCodeColumn)
+      DataSource dataSource, boolean compatible, int inviteCodeLength, String inviteCodeColumn)
       throws SQLException {
     Connection connection = mock(Connection.class);
     Statement statement = mock(Statement.class);
     ResultSet resultSet = mock(ResultSet.class);
     DatabaseMetaData metaData = mock(DatabaseMetaData.class);
-    ResultSet keys = mock(ResultSet.class);
+    ResultSet keyCapability = mock(ResultSet.class);
     ResultSet inviteCode = mock(ResultSet.class);
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.createStatement()).thenReturn(statement);
@@ -178,13 +174,15 @@ class ReadinessCheckTest {
     when(metaData.getDatabaseMinorVersion()).thenReturn(0);
     when(metaData.getURL()).thenReturn("jdbc:postgresql://localhost/junto");
     when(metaData.getUserName()).thenReturn("junto");
-    when(statement.executeQuery(anyString())).thenReturn(resultSet);
-    when(metaData.getPrimaryKeys(null, "public", "chat_rate_limits")).thenReturn(keys);
+    when(statement.executeQuery(anyString()))
+        .thenAnswer(
+            invocation ->
+                invocation.<String>getArgument(0).contains("pg_catalog.pg_index")
+                    ? keyCapability
+                    : resultSet);
     when(metaData.getColumns(null, "public", "auth_tokens", "invite_code")).thenReturn(inviteCode);
-    AtomicInteger keyCursor = new AtomicInteger();
-    when(keys.next()).thenAnswer(invocation -> keyCursor.getAndIncrement() < keyColumns.size());
-    when(keys.getString("COLUMN_NAME"))
-        .thenAnswer(invocation -> keyColumns.get(keyCursor.get() - 1));
+    when(keyCapability.next()).thenReturn(true, false);
+    when(keyCapability.getBoolean("compatible")).thenReturn(compatible);
     when(inviteCode.next()).thenReturn(true, false);
     when(inviteCode.getString("TABLE_SCHEM")).thenReturn("public");
     when(inviteCode.getString("TABLE_NAME")).thenReturn("auth_tokens");

@@ -114,6 +114,30 @@ class ReadinessFailureIntegrationTest {
 
   @Test
   @Order(3)
+  void deferrableChatRateLimitKeyIsNotReady() throws Exception {
+    execute(
+        """
+        ALTER TABLE chat_rate_limits
+          DROP CONSTRAINT chat_rate_limits_pkey,
+          ADD CONSTRAINT chat_rate_limits_pkey
+            PRIMARY KEY (activity_id, user_id) DEFERRABLE
+        """);
+    try {
+      expectReadiness(false);
+    } finally {
+      execute(
+          """
+          ALTER TABLE chat_rate_limits
+            DROP CONSTRAINT chat_rate_limits_pkey,
+            ADD CONSTRAINT chat_rate_limits_pkey
+              PRIMARY KEY (activity_id, user_id) NOT DEFERRABLE
+          """);
+    }
+    expectReadiness(true);
+  }
+
+  @Test
+  @Order(4)
   void databaseOutageIsNotReady() throws Exception {
     expectReadiness(true);
 
