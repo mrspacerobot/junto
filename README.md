@@ -109,8 +109,8 @@ two-second readiness operation, the required schema capabilities are present, an
 the applied schema against every migration shipped in the build. It returns HTTP 503 with
 `{"status":"unavailable"}` when the database is unavailable or times out, a shipped migration is
 unapplied or invalid, or a required schema invariant has drifted, including the
-`chat_rate_limits (activity_id, user_id)` key. Failure details are logged but never exposed by the
-endpoint.
+immediate, non-partial unique or primary key on `chat_rate_limits (activity_id, user_id)` that
+PostgreSQL can use for `ON CONFLICT`. Failure details are logged but never exposed by the endpoint.
 
 SMTP is deliberately excluded, so a mail outage does not remove an otherwise healthy instance
 from service. Each success or failure is cached for one second after its check completes, which
