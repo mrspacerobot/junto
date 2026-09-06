@@ -107,6 +107,30 @@ class ReadinessFailureIntegrationTest {
 
   @Test
   @Order(3)
+  void schemaBaselinedAheadOfThisBuildIsNotReady() throws Exception {
+    execute("TRUNCATE flyway_schema_history");
+    execute(
+        """
+        INSERT INTO flyway_schema_history (
+            installed_rank, version, description, type, script, checksum,
+            installed_by, execution_time, success)
+        VALUES (
+            1, '999', 'future baseline', 'BASELINE', '<< Flyway Baseline >>', NULL,
+            'test', 0, true)
+        """);
+    try {
+      expectReadiness(false);
+    } finally {
+      Flyway currentBuild = currentBuildFlyway();
+      currentBuild.clean();
+      currentBuild.migrate();
+    }
+
+    expectReadiness(true);
+  }
+
+  @Test
+  @Order(4)
   void newestMigrationCapabilityDriftIsNotReady() throws Exception {
     execute("ALTER TABLE access_codes DROP COLUMN created_at");
     try {
@@ -134,7 +158,7 @@ class ReadinessFailureIntegrationTest {
   }
 
   @Test
-  @Order(4)
+  @Order(5)
   void deferrableChatRateLimitKeyIsNotReady() throws Exception {
     execute(
         """
@@ -158,7 +182,7 @@ class ReadinessFailureIntegrationTest {
   }
 
   @Test
-  @Order(5)
+  @Order(6)
   void databaseOutageIsNotReady() throws Exception {
     expectReadiness(true);
 
@@ -195,5 +219,13 @@ class ReadinessFailureIntegrationTest {
         Statement statement = connection.createStatement()) {
       statement.execute(sql);
     }
+  }
+
+  private Flyway currentBuildFlyway() {
+    return Flyway.configure()
+        .configuration(flyway.getConfiguration())
+        .cleanDisabled(false)
+        .target(MigrationVersion.LATEST)
+        .load();
   }
 }
