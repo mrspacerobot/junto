@@ -2,12 +2,10 @@ package ch.junto.bootstrap;
 
 import ch.junto.JuntoApplication;
 import ch.junto.invite.AccessCodeService;
-import java.util.Arrays;
-import java.util.EnumSet;
+import ch.junto.migration.SchemaCurrency;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.FlywayException;
 import org.flywaydb.core.api.MigrationInfo;
-import org.flywaydb.core.api.MigrationState;
 import org.flywaydb.core.api.output.ValidateResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,14 +31,6 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 class BootstrapContext {
 
   private static final Logger log = LoggerFactory.getLogger(BootstrapContext.class);
-  private static final EnumSet<MigrationState> CURRENT_STATES =
-      EnumSet.of(
-          MigrationState.BASELINE,
-          MigrationState.BASELINE_IGNORED,
-          MigrationState.BELOW_BASELINE,
-          MigrationState.SUCCESS,
-          MigrationState.SUPERSEDED,
-          MigrationState.AVAILABLE);
 
   /**
    * Replaces the startup migration with a verification. Bootstrap writes rows into a schema it
@@ -67,11 +57,7 @@ class BootstrapContext {
                 + result.getAllErrorMessages());
       }
 
-      boolean hasNonCurrentMigration =
-          Arrays.stream(flyway.info().all())
-              .map(MigrationInfo::getState)
-              .anyMatch(state -> !CURRENT_STATES.contains(state));
-      if (hasNonCurrentMigration) {
+      if (!SchemaCurrency.hasOnlyCurrentMigrations(flyway)) {
         throw new BootstrapAbortedException(
             "Refusing to bootstrap: the database schema is not current for this build. "
                 + "Deploy the matching application version and let it migrate first.");
