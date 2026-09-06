@@ -105,12 +105,13 @@ assert the behavior on both sides of the boundary against a real servlet contain
 
 Configure Render's health check path as `/healthz`. This public endpoint returns only one of two
 fixed response bodies: HTTP 200 with `{"status":"ok"}` when the database answers within the
-two-second readiness operation, the required schema capabilities are present, and Flyway validates
-the applied schema against every migration shipped in the build. It returns HTTP 503 with
-`{"status":"unavailable"}` when the database is unavailable or times out, a shipped migration is
-unapplied or invalid, or a required schema invariant has drifted, including the
-immediate, non-partial unique or primary key on `chat_rate_limits (activity_id, user_id)` that
-PostgreSQL can use for `ON CONFLICT`. Failure details are logged but never exposed by the endpoint.
+two-second readiness operation, the required schema capabilities are present, and the applied
+Flyway schema is valid and current for every migration shipped in the build. It returns HTTP 503
+with `{"status":"unavailable"}` when the database is unavailable or times out, the schema is
+unapplied, invalid, or ahead of this build, or a required schema invariant has drifted, including
+the immediate, non-partial unique or primary key on
+`chat_rate_limits (activity_id, user_id)` that PostgreSQL can use for `ON CONFLICT`. Failure details
+are logged but never exposed by the endpoint.
 
 SMTP is deliberately excluded, so a mail outage does not remove an otherwise healthy instance
 from service. Each success or failure is cached for one second after its check completes, which

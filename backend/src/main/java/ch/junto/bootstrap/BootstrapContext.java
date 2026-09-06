@@ -31,6 +31,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 class BootstrapContext {
 
   private static final Logger log = LoggerFactory.getLogger(BootstrapContext.class);
+
   /**
    * Replaces the startup migration with a verification. Bootstrap writes rows into a schema it
    * refuses to change: a database behind, ahead of, or inconsistent with this build is reported and
