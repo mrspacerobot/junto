@@ -86,6 +86,27 @@ class ReadinessFailureIntegrationTest {
 
   @Test
   @Order(2)
+  void schemaAheadOfThisBuildIsNotReady() throws Exception {
+    execute(
+        """
+        INSERT INTO flyway_schema_history (
+            installed_rank, version, description, type, script, checksum,
+            installed_by, execution_time, success)
+        SELECT max(installed_rank) + 1, '999', 'future migration', 'SQL',
+            'V999__future_migration.sql', 0, 'test', 0, true
+        FROM flyway_schema_history
+        """);
+    try {
+      expectReadiness(false);
+    } finally {
+      execute("DELETE FROM flyway_schema_history WHERE version = '999'");
+    }
+
+    expectReadiness(true);
+  }
+
+  @Test
+  @Order(3)
   void newestMigrationCapabilityDriftIsNotReady() throws Exception {
     execute("ALTER TABLE access_codes DROP COLUMN created_at");
     try {
@@ -113,7 +134,7 @@ class ReadinessFailureIntegrationTest {
   }
 
   @Test
-  @Order(3)
+  @Order(4)
   void deferrableChatRateLimitKeyIsNotReady() throws Exception {
     execute(
         """
@@ -137,7 +158,7 @@ class ReadinessFailureIntegrationTest {
   }
 
   @Test
-  @Order(4)
+  @Order(5)
   void databaseOutageIsNotReady() throws Exception {
     expectReadiness(true);
 

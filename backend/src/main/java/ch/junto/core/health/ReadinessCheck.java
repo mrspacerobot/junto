@@ -1,5 +1,6 @@
 package ch.junto.core.health;
 
+import ch.junto.migration.SchemaCurrency;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -232,8 +233,13 @@ public class ReadinessCheck {
       if (!validation.validationSuccessful) {
         log.warn(
             "Readiness failed: schema validation reported {}", validation.getAllErrorMessages());
+        return false;
       }
-      return validation.validationSuccessful;
+      if (!SchemaCurrency.hasOnlyCurrentMigrations(currentBuild)) {
+        log.warn("Readiness failed: the database schema is not current for this build");
+        return false;
+      }
+      return true;
     } catch (Exception e) {
       log.warn("Readiness failed: schema validation could not run", e);
       return false;
