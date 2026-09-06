@@ -2135,8 +2135,7 @@
         "type": "object",
         "properties": {
           "email": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
           }
         }
       },
@@ -2144,8 +2143,7 @@
         "type": "object",
         "properties": {
           "email": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
           },
           "inviteCode": {
             "type": "string"
@@ -2283,8 +2281,7 @@
             "pattern": "\\d{6}"
           },
           "email": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
           }
         }
       },
